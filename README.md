@@ -4,7 +4,9 @@ A fitness mode for [Descenders](https://store.steampowered.com/app/681280/Descen
 
 > Status: proof of concept. An unofficial fan mod, not affiliated with or endorsed by the makers of Descenders.
 
-<!-- TODO (maintainer): how-to videos, social links, donation links. -->
+If you enjoy it, you can [buy me a coffee](https://buymeacoffee.com/laserkestrel).
+
+<!-- TODO (maintainer): how-to videos, social links. -->
 
 ## What you need
 
@@ -37,6 +39,10 @@ The first builds the mod and copies it into the game's `Mods` folder (close the 
 - **[DescendersSandbox](https://github.com/NateHyden/DescendersSandboxModKit)**, whose techniques for finding the player and injecting steering this mod follows.
 - **ANT+ / ANT Managed Library** by Garmin / Dynastream Innovations.
 
-## Licences
+## Licence
 
-The ANT libraries in `lib\ant` are redistributed under the ANT+ Shared Source Licence. The notice and the full licence text are in [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt). That licence forbids reverse engineering, decompiling or disassembling those DLLs.
+Free for non-commercial use. The mod and the bridge are licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): you may use, copy, change and share them for any non-commercial purpose. Commercial use needs separate permission.
+
+Required Notice: Copyright 2026 Laserkestrel (https://github.com/laserkestrel)
+
+That licence covers this project's own code only. The ANT libraries in `lib\ant` are redistributed under the ANT+ Shared Source Licence. The notice and the full licence text are in [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt). That licence forbids reverse engineering, decompiling or disassembling those DLLs.
