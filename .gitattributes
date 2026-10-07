@@ -1,0 +1,2 @@
+# Windows batch files need CRLF (installer packs).
+*.cmd text eol=crlf

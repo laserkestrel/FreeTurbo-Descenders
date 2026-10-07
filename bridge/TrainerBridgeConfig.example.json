@@ -1,0 +1,105 @@
+{
+  "rider": {
+    "riderWeightKg": 75,
+    "bikeWeightKg": 9,
+    "ftpW": 180,
+    "wheelDiameterM": 0.7,
+    "gearRatio": 1,
+    "bikeType": "road"
+  },
+  "devices": {
+    "Trainer": {
+      "deviceType": 17,
+      "deviceNumber": 12345,
+      "transmissionType": 5,
+      "name": "Trainer (FE-C)",
+      "manufacturerId": 89
+    },
+    "HeartRate": {
+      "deviceType": 120,
+      "deviceNumber": 7000,
+      "transmissionType": 1,
+      "name": "Heart rate"
+    }
+  },
+  "knownDevices": [
+    {
+      "deviceType": 17,
+      "deviceNumber": 12345,
+      "transmissionType": 5,
+      "name": "Trainer (FE-C)",
+      "manufacturerId": 89
+    },
+    {
+      "deviceType": 120,
+      "deviceNumber": 7000,
+      "transmissionType": 1,
+      "name": "Heart rate"
+    },
+    {
+      "deviceType": 120,
+      "deviceNumber": 8111,
+      "transmissionType": 1,
+      "name": "Heart rate"
+    },
+    {
+      "deviceType": 17,
+      "deviceNumber": 0,
+      "transmissionType": 0,
+      "name": "KICKR CORE 1234",
+      "transport": "bluetooth",
+      "address": "C1:23:45:67:89:AB"
+    },
+    {
+      "deviceType": 120,
+      "deviceNumber": 0,
+      "transmissionType": 0,
+      "name": "Polar H10 1A2B3C4D",
+      "transport": "bluetooth",
+      "address": "E4:5F:01:23:45:67"
+    }
+  ],
+  "training": {
+    "trainerDifficulty": 0.35,
+    "ergMinW": 30,
+    "ergMaxW": 400,
+    "ergStepW": 10,
+    "ergDefaultW": 120,
+    "workoutBiasStepPct": 5,
+    "workoutPauseSeconds": 3
+  },
+  "library": {
+    "dir": "C:\\Users\\you\\Documents\\WorkoutLibrary"
+  },
+  "logs": {
+    "dir": ""
+  },
+  "graphs": {
+    "historySeconds": 300
+  },
+  "window": {
+    "accentColour": "#00A0B1"
+  },
+  "progress": {
+    "version": 1,
+    "activePlan": "6wk_FTP_Builder",
+    "plans": {
+      "6wk_FTP_Builder": {
+        "title": "FTP Builder",
+        "startedUtc": "2026-09-22T18:04:11Z",
+        "completed": [
+          {
+            "ref": "b0.a0",
+            "file": "ftp_builder_1.xml",
+            "utc": "2026-09-22T18:52:36Z",
+            "elapsedS": 2740,
+            "avgW": 176,
+            "ftpW": 180,
+            "bias": 100,
+            "skipped": false
+          }
+        ]
+      }
+    }
+  }
+}

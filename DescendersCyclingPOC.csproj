@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Optional per-machine override; see GamePath.props.example -->
+  <Import Project="GamePath.props" Condition="Exists('GamePath.props')" />
+
+  <PropertyGroup Condition="'$(DescendersPath)' == ''">
+    <DescendersPath>C:\Program Files (x86)\Steam\steamapps\common\Descenders</DescendersPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Same target as DescendersSandbox: Unity 2017.4 Mono, .NET Framework 4.7.2 profile -->
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>DescendersCyclingPOC</AssemblyName>
+    <RootNamespace>DescendersCyclingPOC</RootNamespace>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- Unity 2017 Mono lacks System.Runtime.Versioning.TargetFrameworkAttribute (Sandbox does the same) -->
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>Output\</OutputPath>
+    <!-- Don't copy referenced game DLLs next to our output -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- The bridge (bridge/) is a separate net8.0 project; do not glob its sources into the mod. tests/ are compiled into the bridge selftest. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);bridge/**;lib/**;tests/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Bridge-only: the workout / plan lists, training plans and progress run in the bridge (bridge\DescendersBridge.csproj links them) -->
+    <Compile Remove="src/WorkoutPicker.cs;src/PlanPicker.cs;src/Plan.cs;src/Progress.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference assemblies so no Windows targeting pack / Visual Studio is required -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="0Harmony"><HintPath>$(DescendersPath)\MelonLoader\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="MelonLoader"><HintPath>$(DescendersPath)\MelonLoader\MelonLoader.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(DescendersPath)\Descenders_Data\Managed\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(DescendersPath)\Descenders_Data\Managed\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TerrainModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.TerrainModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TerrainPhysicsModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.TerrainPhysicsModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- Commit / branch / +changes / build time -> AssemblyInformationalVersion (the DLL's ProductVersion) and BuildStamp.Text -->
+  <Import Project="BuildStamp.targets" />
+
+  <!-- Copy the DLL into the game's Mods folder after every build (never touches DescendersSandbox.dll) -->
+  <Target Name="InstallToMods" AfterTargets="Build" Condition="Exists('$(DescendersPath)\Mods') And '$(SkipInstall)' != 'true'">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(DescendersPath)\Mods" />
+    <Message Importance="high" Text="Installed $(TargetFileName) -> $(DescendersPath)\Mods" />
+  </Target>
+
+</Project>

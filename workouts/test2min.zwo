@@ -1,0 +1,17 @@
+<workout_file>
+  <author/>
+  <name>Test 2 min</name>
+  <description>Synthetic 2 minute workout for time-compressed tests. At FTP 180: warm-up 45 -> 135 W (20 s), 3 x (10 s at 180 W + 20 s at 90 W), cool-down 135 -> 45 W (10 s).</description>
+  <sportType>bike</sportType>
+  <durationType>time</durationType>
+  <tags/>
+  <workout>
+    <Warmup Duration="20" PowerLow="0.25" PowerHigh="0.75" pace="0">
+      <textevent timeoffset="2" message="Test workout: warm-up"/>
+      <textevent timeoffset="10" message="Test workout: Getting warm?"/>
+      <textevent timeoffset="14" message="Test workout: Get ready!"/>
+    </Warmup>
+    <IntervalsT Repeat="3" OnDuration="10" OffDuration="20" OnPower="1" OffPower="0.5" pace="0"/>
+    <Cooldown Duration="10" PowerLow="0.75" PowerHigh="0.25" pace="0"/>
+  </workout>
+</workout_file>

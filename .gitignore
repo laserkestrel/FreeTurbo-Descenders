@@ -1,0 +1,22 @@
+bin/
+obj/
+Output/
+GamePath.props
+*.user
+.vs/
+
+# Bridge: ANT+ network key (adopter secret); per-user settings (normally in %APPDATA%\TrainerBridge,
+# and the older devices.json / rider.json they replaced) must never be committed either
+bridge/config.json
+bridge/devices.json
+TrainerBridgeConfig.json
+rider.json
+
+# Bridge ride recordings
+bridge/logs/
+
+# Overnight issue runner logs (tools/run-ready-issues.ps1)
+_runner_logs/
+
+# Release staging and zips (tools/Build-Release.ps1)
+_release/

@@ -1,0 +1,128 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- -windows + WinForms: the same exe opens the settings/live window when started with no arguments (Gui\). -->
+    <!-- windows10.0.19041.0: gives the Bluetooth Low Energy API built into Windows 10 / 11 (Windows.Devices.Bluetooth) with no
+         NuGet package and no extra DLL beside the exe; only Bluetooth\WindowsBle.cs uses it. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <!-- The window and ANT+ still run on an older Windows; there the Bluetooth calls fail and are reported as "This PC has no Bluetooth". -->
+    <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Generic name: the trainer bridge is meant to be reusable by other games, not just this mod. -->
+    <AssemblyName>turbotrainer-bridge</AssemblyName>
+    <RootNamespace>DescendersBridge</RootNamespace>
+    <!-- ANT_WrappedLib.dll is a 32-bit mixed-mode assembly: the whole process must be x86. -->
+    <PlatformTarget>x86</PlatformTarget>
+    <!--
+      Always self-contained win-x86, dev builds included: the output carries its own .NET, so `dotnet build` / `dotnet run` work on a machine
+      with no x86 .NET 8 Desktop Runtime installed, same as a release. Output path stays bin\<cfg>\net8.0-windows10.0.19041.0\ (no win-x86\ subfolder).
+    -->
+    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- The exe's icon in Explorer / shortcuts / Task Manager; the window takes the same file from the embedded copy below (AppIcon.cs). -->
+    <ApplicationIcon>Assets\bridge.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\bridge.ico" LogicalName="bridge.ico" />
+  </ItemGroup>
+
+  <!--
+    ANT+ network key, compiled into the exe so release users need no config.json. The licence forbids the key in
+    source, so it only ever comes from outside the repo, first non-empty wins:
+      1. -p:AntNetworkKey=...            2. environment variable ANT_NETWORK_KEY
+      3. ant.networkKey in bridge/config.json (gitignored), so an existing checkout needs no extra setup.
+    It lands in the generated AssemblyInfo under obj/ (gitignored). -p:RequireAntKey=true turns "no key" into an error (release builds).
+    Never print the value in a build message.
+  -->
+  <PropertyGroup>
+    <AntNetworkKey Condition="'$(AntNetworkKey)' == ''">$(ANT_NETWORK_KEY)</AntNetworkKey>
+    <_AntConfigJson>$(MSBuildThisFileDirectory)..\config.json</_AntConfigJson>
+    <_AntConfigText Condition="'$(AntNetworkKey)' == '' And Exists('$(_AntConfigJson)')">$([System.IO.File]::ReadAllText('$(_AntConfigJson)'))</_AntConfigText>
+    <AntNetworkKey Condition="'$(AntNetworkKey)' == '' And '$(_AntConfigText)' != ''">$([System.Text.RegularExpressions.Regex]::Match($(_AntConfigText), '(?&lt;="networkKey"\s*:\s*")[^"]*').Value)</AntNetworkKey>
+    <_AntConfigText></_AntConfigText>
+    <AntNetworkKey>$(AntNetworkKey.Trim())</AntNetworkKey>
+    <AntNetworkKey Condition="'$(AntNetworkKey)' == 'PASTE_ADOPTER_KEY_HERE'"></AntNetworkKey>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(AntNetworkKey)' != ''">
+    <AssemblyMetadata Include="AntNetworkKey" Value="$(AntNetworkKey)" />
+  </ItemGroup>
+
+  <Target Name="CheckAntNetworkKey" BeforeTargets="BeforeBuild" Condition="'$(AntNetworkKey)' == ''">
+    <Error Condition="'$(RequireAntKey)' == 'true'" Text="No ANT+ network key embedded and RequireAntKey=true: pass -p:AntNetworkKey=..., set ANT_NETWORK_KEY, or put ant.networkKey in bridge/config.json." />
+    <Warning Text="No ANT+ network key embedded; the bridge will need config.json (set ANT_NETWORK_KEY or put ant.networkKey in bridge/config.json to embed one)." />
+  </Target>
+
+  <!--
+    Commit / branch / +changes / build time -> AssemblyInformationalVersion and BuildStamp.Text. The SDK copies the managed
+    assembly's version resource into the apphost, so the published single-file exe's ProductVersion carries the stamp too.
+  -->
+  <Import Project="..\..\BuildStamp.targets" />
+
+  <!-- WinForms' implicit global usings would make Timer / Control / Message ambiguous in the console code: the Gui\ files name them. -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <!--
+    `dotnet publish` (Build-Release.ps1, pr-validate.ps1) gives ONE exe: the ANT DLLs are bundled and extracted next to the runtime on first
+    start (IncludeAllContentForSelfExtract, since the ANT library is mixed-mode and cannot load from memory). Paths that must be the exe's own
+    folder (config.json, logs\) use AppPaths.ExeDir, not AppContext.BaseDirectory (that is the extraction folder in a single-file exe).
+  -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile Condition="'$(SelfContained)' == 'true'">true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="ANT_NET">
+      <HintPath>..\..\lib\ant\ANT_NET.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Pure workout logic and the message parsers (and the UDP port probe, IL call reader) shared with the mod (src\*.cs, no Unity code) so `selftest` can run it headless. -->
+  <ItemGroup>
+    <Compile Include="..\..\src\Workout.cs" Link="Workout.cs" />
+    <Compile Include="..\..\src\SessionView.cs" Link="SessionView.cs" />
+    <Compile Include="..\..\src\Json.cs" Link="Json.cs" />
+  </ItemGroup>
+  <!--
+    Bridge-only (the workout / plan lists of the window's Workouts tab, plans and progress run here; DescendersCyclingPOC.csproj leaves them out of the mod). They still sit
+    in src\ and keep the old-Mono style; they can move into this folder with `git mv` (then drop these links and the mod's Compile Remove).
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\src\WorkoutPicker.cs" Link="WorkoutPicker.cs" />
+    <Compile Include="..\..\src\Plan.cs" Link="Plan.cs" />
+    <Compile Include="..\..\src\Progress.cs" Link="Progress.cs" />
+    <Compile Include="..\..\src\PlanPicker.cs" Link="PlanPicker.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\PortProbe.cs" Link="PortProbe.cs" />
+    <Compile Include="..\..\src\IlReader.cs" Link="IlReader.cs" />
+    <Compile Include="..\..\src\DumpFiles.cs" Link="DumpFiles.cs" />
+    <Compile Include="..\..\src\RiderState.cs" Link="RiderState.cs" />
+    <!-- The pure watts -> speed integrator and the bike presets: the mod runs it, the bridge sends the presets and tests it. -->
+    <Compile Include="..\..\src\SpeedModel.cs" Link="SpeedModel.cs" />
+    <Compile Include="..\..\src\Hello.cs" Link="Hello.cs" />
+    <!-- Unit tests kept under tests\unit\, run by `selftest`. -->
+    <Compile Include="..\..\tests\unit\*.cs" LinkBase="tests\unit" />
+  </ItemGroup>
+
+  <!-- Native dependencies of ANT_NET.dll: must sit next to the exe. -->
+  <ItemGroup>
+    <None Include="..\..\lib\ant\ANT_WrappedLib.dll"><Link>ANT_WrappedLib.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+    <None Include="..\..\lib\ant\DSI_CP210xManufacturing_3_1.dll"><Link>DSI_CP210xManufacturing_3_1.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+    <None Include="..\..\lib\ant\DSI_SiUSBXp_3_1.dll"><Link>DSI_SiUSBXp_3_1.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+  </ItemGroup>
+
+</Project>

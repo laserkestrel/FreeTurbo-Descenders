@@ -1,0 +1,77 @@
+<Project>
+  <!--
+    Build stamp, imported by DescendersCyclingPOC.csproj and bridge\DescendersBridge\DescendersBridge.csproj.
+    Before every compile it asks git where the code came from and writes obj\...\BuildStamp.g.cs with
+      - [assembly: AssemblyInformationalVersion(stamp)]: the Win32 ProductVersion of the DLL / exe, readable from the installed file
+        without starting anything: (Get-Item f).VersionInfo.ProductVersion (tools\WhatsInstalled.ps1);
+      - <RootNamespace>.BuildStamp.Text, the same string, for the mod's Build: line / HUD and the bridge's log, window and `version`.
+    Stamp:  <version> (<commit>) on <branch>[ (+changes)], built yyyy-MM-dd HH:mm UTC
+              version = <VERSION file>.<git rev-list count HEAD>, e.g. 1.0.57; -p:StampVersion=x.y.z overrides it
+            <commit> on <branch>...                     no VERSION file / no commit count
+            unknown, built ...                          no git / not a git checkout (e.g. a source zip): never fails the build
+    +changes = the working tree had uncommitted edits or untracked files (git status in porcelain form printed anything).
+    Keep the format in step with ConvertFrom-BuildStamp in tools\WhatsInstalledRules.ps1.
+  -->
+  <PropertyGroup>
+    <!-- The bridge's SDK-generated AssemblyInfo would add a second (version-only) informational version; the stamp replaces it. -->
+    <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
+  </PropertyGroup>
+
+  <Target Name="WriteBuildStamp" BeforeTargets="BeforeCompile;CoreCompile">
+    <Exec Command="git rev-parse --short=7 HEAD" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" EchoOff="true"
+          IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low" StandardErrorImportance="low" ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_BsCommit" />
+      <Output TaskParameter="ExitCode" PropertyName="_BsCommitExit" />
+    </Exec>
+    <Exec Command="git rev-parse --abbrev-ref HEAD" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" EchoOff="true"
+          IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low" StandardErrorImportance="low" ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_BsBranch" />
+      <Output TaskParameter="ExitCode" PropertyName="_BsBranchExit" />
+    </Exec>
+    <Exec Command="git status --porcelain" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" EchoOff="true"
+          IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low" StandardErrorImportance="low" ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" ItemName="_BsStatusLines" />
+      <Output TaskParameter="ExitCode" PropertyName="_BsStatusExit" />
+    </Exec>
+    <Exec Command="git rev-list --count HEAD" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" EchoOff="true"
+          IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low" StandardErrorImportance="low" ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_BsCount" />
+      <Output TaskParameter="ExitCode" PropertyName="_BsCountExit" />
+    </Exec>
+
+    <PropertyGroup>
+      <!-- Automatic version: <VERSION file>.<commit count>, e.g. 1.0.57, unless -p:StampVersion overrides it. -->
+      <_BsVersionFile>$(MSBuildThisFileDirectory)VERSION</_BsVersionFile>
+      <_BsBase Condition="Exists('$(_BsVersionFile)')">$([System.IO.File]::ReadAllText('$(_BsVersionFile)').Trim())</_BsBase>
+      <_BsCount>$(_BsCount.Trim())</_BsCount>
+      <StampVersion Condition="'$(StampVersion)' == '' And '$(_BsCountExit)' == '0' And '$([System.Text.RegularExpressions.Regex]::IsMatch(&quot;$(_BsBase)&quot;, &quot;^\d+(\.\d+)*$&quot;))' == 'true' And '$([System.Text.RegularExpressions.Regex]::IsMatch(&quot;$(_BsCount)&quot;, &quot;^\d+$&quot;))' == 'true'">$(_BsBase).$(_BsCount)</StampVersion>
+      <_BsCommit>$(_BsCommit.Trim())</_BsCommit>
+      <_BsCommit Condition="'$(_BsCommitExit)' != '0' Or '$([System.Text.RegularExpressions.Regex]::IsMatch(&quot;$(_BsCommit)&quot;, &quot;^[0-9a-f]{7,40}$&quot;))' != 'true'">unknown</_BsCommit>
+      <!-- Branch names end up in C# source and the log: keep only characters that need no escaping. Detached HEAD -> "detached". -->
+      <_BsBranch Condition="'$(_BsBranchExit)' != '0'"></_BsBranch>
+      <_BsBranch>$([System.Text.RegularExpressions.Regex]::Replace("$(_BsBranch.Trim())", "[^A-Za-z0-9._/+-]", "_"))</_BsBranch>
+      <_BsBranch Condition="'$(_BsBranch)' == 'HEAD'">detached</_BsBranch>
+      <_BsDirty Condition="'$(_BsStatusExit)' == '0' And '@(_BsStatusLines)' != ''">true</_BsDirty>
+      <_BsVersion>$([System.Text.RegularExpressions.Regex]::Replace("$(StampVersion)", "[^0-9A-Za-z.-]", ""))</_BsVersion>
+      <_BsTime>$([System.DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm"))</_BsTime>
+
+      <BuildStampText>$(_BsCommit)</BuildStampText>
+      <BuildStampText Condition="'$(_BsVersion)' != ''">$(_BsVersion) ($(_BsCommit))</BuildStampText>
+      <BuildStampText Condition="'$(_BsCommit)' != 'unknown' And '$(_BsBranch)' != ''">$(BuildStampText) on $(_BsBranch)</BuildStampText>
+      <BuildStampText Condition="'$(_BsCommit)' != 'unknown' And '$(_BsDirty)' == 'true'">$(BuildStampText) (+changes)</BuildStampText>
+      <BuildStampText>$(BuildStampText), built $(_BsTime) UTC</BuildStampText>
+
+      <_BsFile>$(IntermediateOutputPath)BuildStamp.g.cs</_BsFile>
+    </PropertyGroup>
+
+    <!-- %3B = ';' (WriteLinesToFile splits its Lines on unescaped semicolons). -->
+    <WriteLinesToFile File="$(_BsFile)" Overwrite="true" WriteOnlyWhenDifferent="true"
+                      Lines="// Generated by BuildStamp.targets. Do not edit.;[assembly: System.Reflection.AssemblyInformationalVersion(&quot;$(BuildStampText)&quot;)];namespace $(RootNamespace) { internal static class BuildStamp { public const string Text = &quot;$(BuildStampText)&quot;%3B } }" />
+    <ItemGroup>
+      <Compile Remove="$(_BsFile)" />
+      <Compile Include="$(_BsFile)" />
+      <FileWrites Include="$(_BsFile)" />
+    </ItemGroup>
+    <Message Importance="high" Text="$(MSBuildProjectName) build stamp: $(BuildStampText)" />
+  </Target>
+</Project>
