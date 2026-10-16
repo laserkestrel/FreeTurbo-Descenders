@@ -12,8 +12,8 @@
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Generic name: the trainer bridge is meant to be reusable by other games, not just this mod. -->
-    <AssemblyName>turbotrainer-bridge</AssemblyName>
+    <!-- Generic name: the trainer bridge is meant to be reusable by other games, not just this mod. FreeTurbo-Bridge (was turbotrainer-bridge). -->
+    <AssemblyName>FreeTurbo-Bridge</AssemblyName>
     <RootNamespace>DescendersBridge</RootNamespace>
     <!-- ANT_WrappedLib.dll is a 32-bit mixed-mode assembly: the whole process must be x86. -->
     <PlatformTarget>x86</PlatformTarget>
@@ -114,6 +114,21 @@
     <!-- The pure watts -> speed integrator and the bike presets: the mod runs it, the bridge sends the presets and tests it. -->
     <Compile Include="..\..\src\SpeedModel.cs" Link="SpeedModel.cs" />
     <Compile Include="..\..\src\Hello.cs" Link="Hello.cs" />
+    <!-- The words of the game's HUD, tested by `selftest`. -->
+    <Compile Include="..\..\src\HudRules.cs" Link="HudRules.cs" />
+    <!-- Where a spectator may stand, tested by `selftest`. -->
+    <Compile Include="..\..\src\SpectatorRules.cs" Link="SpectatorRules.cs" />
+    <!-- Night and day during one ride: the sky's hour and the night setting, tested by `selftest`. -->
+    <Compile Include="..\..\src\DayCycleRules.cs" Link="DayCycleRules.cs" />
+    <Compile Include="..\..\src\FieldBlend.cs" Link="FieldBlend.cs" />
+    <!-- Is the path the game holds still the course the mod loaded, tested by `selftest`. -->
+    <Compile Include="..\..\src\CourseRules.cs" Link="CourseRules.cs" />
+    <!-- The picture of a completed workout: its file and when it is taken, tested by `selftest`. -->
+    <Compile Include="..\..\src\WorkoutShotRules.cs" Link="WorkoutShotRules.cs" />
+    <!-- The clip the spectators play (motion capture), tested by `selftest`. -->
+    <Compile Include="..\..\src\MocapClip.cs" Link="MocapClip.cs" />
+    <!-- What the mod and the bridge are called, tested by `selftest`. -->
+    <Compile Include="..\..\src\Names.cs" Link="Names.cs" />
     <!-- Unit tests kept under tests\unit\, run by `selftest`. -->
     <Compile Include="..\..\tests\unit\*.cs" LinkBase="tests\unit" />
   </ItemGroup>

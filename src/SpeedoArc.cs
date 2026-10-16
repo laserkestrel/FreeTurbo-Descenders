@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Power / heart rate / cadence laid out along the outer edge of the game's speedometer dial (docs/HUD_PLACEMENT.md).

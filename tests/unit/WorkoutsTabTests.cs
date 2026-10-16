@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using DescendersBridge.Gui;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 
@@ -10,7 +10,7 @@ namespace DescendersBridge;
 /// edges, the FTP line, the summary line, free ride, a missing or broken file) with its cache. The focus order without the
 /// Start buttons, the hint line, where a click on a picker row starts or steps, how a card shares its spare height (the graph no longer
 /// takes all of it), and the 2 px between the graph's blocks. The window itself is driven in
-/// WindowDesignTests. Temp folder only. Run by `turbotrainer-bridge selftest`.
+/// WindowDesignTests. Temp folder only. Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class WorkoutsTabTests
 {

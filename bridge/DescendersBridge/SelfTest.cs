@@ -1,10 +1,10 @@
 using DescendersBridge.Ant;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 
 /// <summary>
-/// `turbotrainer-bridge selftest`: drives the real <see cref="RideLoop.Step"/> against a fake trainer on a simulated clock (250 ms ticks,
+/// `FreeTurbo-Bridge selftest`: drives the real <see cref="RideLoop.Step"/> against a fake trainer on a simulated clock (250 ms ticks,
 /// like the live loop). No radio, no mod, no game. Covers the bridge half of docs/REQUIREMENTS.md TE5 / TE6 and the page 0x31 encoding.
 /// </summary>
 public static class SelfTest
@@ -207,7 +207,9 @@ public static class SelfTest
         IlReaderTests.Run(Check);
         SessionTests.Run(Check);
         MenuTests.Run(Check, FindFixture);   // workouts and plans chosen in the bridge window, plan progress, the library setting; no menu in the game
+        SamplePlanTests.Run(Check, FindFixture); // the repo's own sample training plan and workouts load as a library, every session resolves
         BuildStampTests.Run(Check);
+        NamesTests.Run(Check);        // the mod is FreeTurbo-Descenders, the bridge is FreeTurbo-Bridge
         TrainingTests.Run(Check);   // the training section, trainer difficulty, ERG limits, the mod's rider wait
         SpeedModelTests.Run(Check);   // the shared speed integrator and the bike-type presets
         HubTests.Run(Check);          // hello, game presence, ride log end / reopen, launch
@@ -217,8 +219,16 @@ public static class SelfTest
         KnownDevicesTests.Run(Check); // a device set to none stays known and on offer
         DeviceIdentityTests.Run(Check); // the manufacturer of ANT+ devices (page decode, table, the window's words, the settings file)
         LogsFolderTests.Run(Check);   // the logs folder is the standard one unless another is chosen on the Logs tab
+        PrintOnceTests.Run(Check);    // the settings block is in the log once, and again only when it changed
         GraphHistoryTests.Run(Check); // the graphs show the last graphs.historySeconds of the settings file, 300 s by default
         AccentColourTests.Run(Check); // the window's accent is teal, window.accentColour of the settings file changes it
+        HudRulesTests.Run(Check);     // the game's HUD: keys beside the toggles, PARTY MODE, "Not connected", teal, 50 px lower
+        SpectatorRulesTests.Run(Check); // the crowd stands on the ground beside the course, never in the air or on the track
+        DayCycleTests.Run(Check);     // night and day during one ride, the sky's hour round the clock
+        FieldBlendTests.Run(Check);   // the game's post-processing settings blended field by field at dusk
+        CourseRulesTests.Run(Check);  // the next level of a session, built in the same scene, is a new course
+        MocapTests.Run(Check);        // the clip a spectator plays (motion capture): where a bone points, looping, the file
+        WorkoutShotTests.Run(Check);  // the picture of a completed workout: its one file name and place, taken while the confetti shows
         WorkoutsTabTests.Run(Check);  // the left / right picker, the up / down focus order, the effort graph and its cache
         ConnectRulesTests.Run(Check); // the window connects by itself; when it does, and the words while it is not connected
         NoStickLogTests.Run(Check);   // no ANT+ stick = one plain ERROR line in the log, no stack trace
@@ -231,6 +241,9 @@ public static class SelfTest
         BleSensorTests.Run(Check);    // the Bluetooth sensor bytes (heart rate, CSC, cycling power), cadence from crank data, setup rules
         BleSensorRideTests.Run(Check); // fake sensors on the seam; a strap dropping out and back mid-ride, which reading wins, no radio
         DeviceSearchTests.Run(Check); // one search for ANT+ and Bluetooth (the four cases), the rows, the Bluetooth trainer's strip words
+        FitTests.Run(Check);          // the .fit activity file's bytes, decoded again (header, CRC, timestamps, totals, pause, absent readings)
+        ActivityRideTests.Run(Check); // the real ride loop writes one activity file per workout, none for freeride or a short early end
+        ActivitySpeedTests.Run(Check);  // the activity file's speed and distance are the game's speedometer scale, not the real speed
         WindowDesignTests.Run(Check); // the window's palette and rules, and the real window built and painted off-screen
 
         Console.WriteLine($"\n{_pass} checks passed, {_fail} failed.");

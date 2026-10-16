@@ -9,9 +9,10 @@ namespace DescendersBridge;
 ///  - no network key: report it and wait (nothing else can be done);
 ///  - no ANT+ stick: report it and retry every few seconds (the rider may plug it in after starting the game);
 ///  - no trainer chosen yet (none in TrainerBridgeConfig.json): scan, take the trainer heard most (the nearest one) and a heart-rate monitor, save them;
-///  - then ride. The game no longer passes --parent: quitting the game leaves the bridge, session and ride log running (the trainer
-///    goes flat on stale telemetry, the ride log ends after <see cref="GamePresence.GoneSeconds"/>); the bridge stops by itself, releasing the trainer,
-///    once no game has been heard for <see cref="GamePresence.AutoIdleExitMinutes"/> (it has no window to close), or on Ctrl+C / --parent.
+///  - then ride. The game no longer passes --parent; the game says `bye` when it quits and this bridge (it has
+///    no window to close) stops, releasing the trainer. A game that crashed says nothing: the trainer goes flat on stale telemetry, the ride log
+///    ends after <see cref="GamePresence.GoneSeconds"/>, and the bridge stops by itself once no game has been heard for
+///    <see cref="GamePresence.AutoIdleExitMinutes"/>, or on Ctrl+C / --parent / `FreeTurbo-Bridge stop`.
 /// The link to the game is opened first and kept for the whole run, so a game is heard in every phase. `setup` still works for anyone who wants to choose by hand.
 /// Console output is copied to logs\bridge_*.log, since there is no window to read it in.
 /// </summary>
@@ -44,7 +45,12 @@ public static class AutoRun
         IdleWatch(mod, cts);
         mod.ShutdownRequested = () =>
         {
-            Console.WriteLine("Asked to stop (turbotrainer-bridge stop): stopping (the trainer is released first).");
+            Console.WriteLine("Asked to stop (FreeTurbo-Bridge stop): stopping (the trainer is released first).");
+            cts.Cancel();
+        };
+        mod.GameQuit = () =>   // no window to close, so a hidden bridge must not stay behind when the rider quits the game
+        {
+            Console.WriteLine("The game quit: stopping (the trainer is released first).");
             cts.Cancel();
         };
         try { return await RideAsync(mod, rider, prefs, ct); }
@@ -148,7 +154,7 @@ public static class AutoRun
         foreach (var d in found) Console.WriteLine("  " + Setup.Describe(d));
         prefs.Set(Role.Trainer, trainers[0].Key, trainers[0].Identity?.ManufacturerId);
         if (trainers.Count > 1)
-            Console.WriteLine($"{trainers.Count} trainers heard; chose {trainers[0].Key} (heard most). Run `turbotrainer-bridge setup` to pick another.");
+            Console.WriteLine($"{trainers.Count} trainers heard; chose {trainers[0].Key} (heard most). Run `FreeTurbo-Bridge setup` to pick another.");
 
         // a watch with no skin contact broadcasts 0 bpm: prefer one with a reading
         var hr = found.Where(d => d.Key.DeviceType == AntDeviceTypes.HeartRate)
@@ -182,8 +188,7 @@ public static class AutoRun
         try
         {
             string dir = Ride.UsableLogsDir(Console.WriteLine);   // the folder set on the window's Logs tab, else logs\ beside config.json
-            foreach (var old in new DirectoryInfo(dir).GetFiles("bridge_*.log").OrderByDescending(f => f.Name).Skip(KeepLogs - 1))
-                try { old.Delete(); } catch { }
+            LogsFolder.Prune(dir, "bridge_", ".log", KeepLogs);
             var w = new StreamWriter(Path.Combine(dir, $"bridge_{DateTime.Now:yyyyMMdd_HHmmss}.log"), false, new UTF8Encoding(false)) { AutoFlush = true };
             Console.SetOut(new TeeWriter(Console.Out, w));
             return w;

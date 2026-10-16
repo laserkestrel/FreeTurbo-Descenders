@@ -4,7 +4,7 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>One frame of game state read by the probe.</summary>
     internal struct GameState

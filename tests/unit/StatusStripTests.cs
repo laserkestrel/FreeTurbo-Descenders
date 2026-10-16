@@ -6,7 +6,7 @@ namespace DescendersBridge;
 /// The Ride tab has no "Riding / Not riding" line; one slim status strip under the readings says Trainer and Game, each a light
 /// plus a few words. What the strip says for each state (<see cref="StripRules.Trainer"/>, <see cref="GamePresence.Short"/>), the log line
 /// for each change of the ride state, once (<see cref="StripRules.LogLine"/>), and the one size of status light.
-/// Run by `turbotrainer-bridge selftest`.
+/// Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class StatusStripTests
 {

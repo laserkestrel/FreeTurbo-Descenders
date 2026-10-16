@@ -26,5 +26,5 @@ public sealed record RiderConfig
     public double WheelDiameterM { get; init; } = 0.7;
     public double GearRatio { get; init; } = 1.0;
     /// <summary>Bike-type preset (src\SpeedModel.cs BikePresets): "road" (the physics before #47), "gravel" or "mtb"; each a fixed CdA + Crr.</summary>
-    public string BikeType { get; init; } = DescendersCyclingPOC.BikePresets.Default;
+    public string BikeType { get; init; } = FreeTurboDescenders.BikePresets.Default;
 }

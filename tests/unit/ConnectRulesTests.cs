@@ -7,7 +7,7 @@ namespace DescendersBridge;
 /// The bridge window connects by itself (no Start / Stop button). <see cref="ConnectRules.Decide"/> is the "should the window
 /// connect now?" rule: a device saved, the ANT+ key present, no device search running, not connected / stopping already, and a failed
 /// connection only on the rider's "Try again" (or another press that asks for a new try). Plus the words shown while not connected, which
-/// must not name the button that is gone. Run by `turbotrainer-bridge selftest`.
+/// must not name the button that is gone. Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class ConnectRulesTests
 {

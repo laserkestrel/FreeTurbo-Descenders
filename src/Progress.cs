@@ -5,7 +5,7 @@ using System.Globalization;
 using System.IO;
 
 // Pure logic (no Unity, no logging), bridge-only (bridge/DescendersBridge.csproj links this file; the mod leaves it out).
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>One completed activity (docs/PLANS.md progress.json "completed"); append-only (V3.5/V3.6).</summary>
     internal sealed class ProgressRecord

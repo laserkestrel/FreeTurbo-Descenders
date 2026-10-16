@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Path following: reads where the rider is relative to the game's generated course centreline, always (for
@@ -271,7 +271,7 @@ namespace DescendersCyclingPOC
         internal static void Install(AutoSteer instance, PlayerProbe probe)
         {
             Instance = instance; Probe = probe;
-            var harmony = new HarmonyLib.Harmony("descenders.cycling.poc.autosteer");
+            var harmony = new HarmonyLib.Harmony("freeturbo.descenders.autosteer");
             MethodInfo target = typeof(VehicleController).GetMethod("FixedUpdate", BindingFlags.NonPublic | BindingFlags.Instance);
             if ((object)target == null) { Log.Error("AutoSteer: VehicleController.FixedUpdate not found; autosteer unavailable"); return; }
             MethodInfo post = typeof(AutoSteerPatch).GetMethod("Postfix", BindingFlags.Public | BindingFlags.Static);

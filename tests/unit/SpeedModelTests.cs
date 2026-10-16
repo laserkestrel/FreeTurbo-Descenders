@@ -1,12 +1,12 @@
 using DescendersBridge.Ant;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 
 /// <summary>
 /// The shared watts -> speed integrator (src\SpeedModel.cs) and the bike-type presets that travel in the `rider` message.
 /// Steady-state speeds are checked against an independent power balance (bisection), so a change to the integrator that alters the feel shows up here.
-/// Run by `turbotrainer-bridge selftest`.
+/// Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class SpeedModelTests
 {

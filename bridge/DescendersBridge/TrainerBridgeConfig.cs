@@ -21,7 +21,7 @@ public sealed record UserConfig(RiderConfig Rider, DevicePreferences Devices)
 /// (`progress` section, src\Progress.cs ProgressFile, written by the ride's <see cref="PlanBook"/>), and the `training` section
 /// (<see cref="TrainingConfig"/>: ERG limits, workout bias / pause, trainer difficulty; no migration, it starts from the defaults), and
 /// the `knownDevices` list: every device ever chosen, kept when its role is set to none, and the logs folder
-/// (`logs` section, {"dir": "..."}, set in the window; absent or "" = the standard one), and how far back the window's graphs go
+/// (`logs` section, {"dir": "..."}, set in the window; absent or "" = the standard one), the activities folder likewise (`activities` section), and how far back the window's graphs go
 /// (`graphs` section, {"historySeconds": 300}, edited by hand), and the window's accent colour
 /// (`window` section, {"accentColour": "#00A0B1"}, edited by hand). The bridge is the only writer of this
 /// file: every save re-reads it and replaces only its own section (<see cref="SaveSection"/>, ProgressFile.Save), so the others are kept.
@@ -66,10 +66,20 @@ public static class TrainerBridgeConfig
     private static FileModel ModelOf(UserConfig cfg) =>
         new() { Rider = cfg.Rider, Devices = cfg.Devices.Roles, KnownDevices = cfg.Devices.Known, Training = cfg.Training };
 
-    /// <summary>Load (or create / migrate) <see cref="Path"/> and print it. Never throws: a broken file gives the defaults and a log line.</summary>
-    public static UserConfig Load() => PathOverride is { } p
-        ? Load(p, "", "", () => null, Console.WriteLine)   // a --config file is never seeded from the real old files
-        : Load(Path, LegacyRiderPath, LegacyDevicesPath, BridgeConfig.LegacyRider, Console.WriteLine);
+    /// <summary>Load (or create / migrate) <see cref="Path"/> and print it. Never throws: a broken file gives the defaults and a log line.
+    /// The window loads the file at every connect, save and undo, so the lines are printed the first time and after that only when
+    /// they differ from the last ones printed (<see cref="PrintOnce"/>).</summary>
+    public static UserConfig Load()
+    {
+        var said = new List<string>();
+        var cfg = PathOverride is { } p
+            ? Load(p, "", "", () => null, said.Add)   // a --config file is never seeded from the real old files
+            : Load(Path, LegacyRiderPath, LegacyDevicesPath, BridgeConfig.LegacyRider, said.Add);
+        if (Printed.IsNew(said)) foreach (string line in said) Console.WriteLine(line);
+        return cfg;
+    }
+
+    private static readonly PrintOnce Printed = new();
 
     /// <summary>Testable core: <paramref name="legacyConfigRider"/> returns config.json's old `rider` block (null = none).</summary>
     internal static UserConfig Load(string path, string legacyRiderPath, string legacyDevicesPath, Func<RiderConfig?> legacyConfigRider, Action<string> log)
@@ -176,6 +186,19 @@ public static class TrainerBridgeConfig
     internal static void SaveLogsDir(string path, string dir) =>
         SaveSection(path, "logs", new JsonObject { ["dir"] = (dir ?? "").Trim() }, "set the logs folder again");
 
+    /// <summary>The activities folder the rider chose (`activities.dir`), "" when not set (= the standard one,
+    /// <see cref="ActivityFiles.StandardDir"/>) or the file cannot be read. Read like <see cref="LoadLibraryDir()"/>.</summary>
+    public static string LoadActivitiesDir() => LoadActivitiesDir(Path);
+
+    internal static string LoadActivitiesDir(string path) => LoadDir(path, "activities");
+
+    /// <summary>Store the activities folder in <see cref="Path"/> ("" = the standard one), leaving the other sections as they are.</summary>
+    public static void SaveActivitiesDir(string dir) => SaveActivitiesDir(Path, dir);
+
+    /// <summary>Throws when the existing file is not valid JSON, like <see cref="SaveDevices(string, DevicePreferences)"/>.</summary>
+    internal static void SaveActivitiesDir(string path, string dir) =>
+        SaveSection(path, "activities", new JsonObject { ["dir"] = (dir ?? "").Trim() }, "set the activities folder again");
+
     /// <summary>How many seconds the Ride tab's graphs show (`graphs.historySeconds`,; edited by hand, no field in the window).
     /// Absent, not a number or an unreadable file = <see cref="Gui.GraphHistory.DefaultSeconds"/>; clamped. Never throws.</summary>
     public static int LoadGraphHistorySeconds() => LoadGraphHistorySeconds(Path);
@@ -261,7 +284,7 @@ public static class TrainerBridgeConfig
         catch (Exception) { return null; }
     }
 
-    /// <summary>The `dir` of a folder section (`library`, `logs`), "" when there is none. Never throws.</summary>
+    /// <summary>The `dir` of a folder section (`library`, `logs`, `activities`), "" when there is none. Never throws.</summary>
     private static string LoadDir(string path, string section)
     {
         try
@@ -466,5 +489,24 @@ public static class TrainerBridgeConfig
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
         File.WriteAllText(path, text, new UTF8Encoding(false));
+    }
+}
+
+/// <summary>Remembers the last block of lines printed, so the same block is not printed twice in a row. Pure, for `selftest`.</summary>
+public sealed class PrintOnce
+{
+    private readonly object _gate = new();
+    private string? _last;
+
+    /// <summary>True the first time and whenever <paramref name="lines"/> differ from the last block this returned true for.</summary>
+    public bool IsNew(IReadOnlyList<string> lines)
+    {
+        string block = string.Join("\n", lines);
+        lock (_gate)
+        {
+            if (block == _last) return false;
+            _last = block;
+            return true;
+        }
     }
 }

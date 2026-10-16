@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 
@@ -9,7 +9,7 @@ namespace DescendersBridge;
 /// 0.0.0.0 (BridgeSim.ps1 before the smoke-test branch) was missed by the old loopback probe, so a real bridge started beside it
 /// and took the telemetry. The probe reads Windows' UDP table instead of binding 0.0.0.0, and this test binds only
 /// 127.0.0.1 too: a socket on 0.0.0.0 makes Windows Firewall ask about every freshly built bridge exe, which broke the QA runs.
-/// The 0.0.0.0 case is covered on the table's bytes. Run by `turbotrainer-bridge selftest`.
+/// The 0.0.0.0 case is covered on the table's bytes. Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class PortProbeTests
 {

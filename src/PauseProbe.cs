@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Is the game paused (telemetry `riding` = player found and not paused, so the bridge holds the workout clock)?

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Reversible WRITE proof: a temporary speed cap on the player's Rigidbody. It only ever scales

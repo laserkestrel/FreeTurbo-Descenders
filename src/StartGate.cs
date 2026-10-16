@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// A virtual "press any button" for the start cabin, for tools\SmokeTest.ps1 (bridge command `press_start`).
@@ -74,7 +74,7 @@ namespace DescendersCyclingPOC
             if (object.ReferenceEquals(_inputCheck, null)) return;
             try
             {
-                var harmony = new HarmonyLib.Harmony("descenders.cycling.poc.startgate");
+                var harmony = new HarmonyLib.Harmony("freeturbo.descenders.startgate");
                 harmony.Patch(_inputCheck, postfix: new HarmonyLib.HarmonyMethod(typeof(StartGate).GetMethod("InputPostfix", BindingFlags.Public | BindingFlags.Static)));
                 _patched = true;
                 Log.Info("StartGate: postfix installed on InputManager." + _inputCheck.Name);

@@ -49,6 +49,9 @@ public sealed class RideLoop
     public Session Session { get; }
     private readonly TrainingWatch? _watch;       // null in tests
 
+    /// <summary>Writes a .fit activity file after each workout and each free ride; null = none (tests set their own, on a temp folder).</summary>
+    internal ActivityRecorder? Activities { get; set; }
+
     // ---- the bridge window's Workouts tab: its presses run here, on the loop's thread, like the game's intents ----
     private readonly System.Collections.Concurrent.ConcurrentQueue<(Func<Session, DateTime, MenuResult> Action, TaskCompletionSource<MenuResult> Done)> _posted = new();
     private static volatile RideLoop? _current;
@@ -80,7 +83,9 @@ public sealed class RideLoop
             PlanBook.Load(TrainerBridgeConfig.Path, Console.WriteLine)))
     {
         _watch = watch;
+        Activities = new ActivityRecorder(() => ActivityFiles.UsableDir(Console.WriteLine), Console.WriteLine);
         Console.WriteLine("Training: " + Training.Describe(watch.Current));
+        Console.WriteLine("Activity files (.fit, one after each workout or free ride): " + ActivityFiles.Dir);
     }
 
     /// <summary>Also the test constructor for <see cref="Tick"/> (tests\unit\RideLoopTests.cs): a fake source, a link on test ports, no settings file.</summary>
@@ -151,6 +156,7 @@ public sealed class RideLoop
         finally
         {
             _current = null;
+            StopActivity(DateTime.UtcNow);
             while (_posted.TryDequeue(out var p)) p.Done.TrySetResult(new MenuResult(false, "The connection to your devices was restarted first: try again in a moment."));
         }
 
@@ -177,7 +183,9 @@ public sealed class RideLoop
         RollRideLog();
         TakeIntents(now, sendNow: false);
         TakePosted(now);
-        Session.Tick(dt, Session.IsPedalling(power, cadence), Riding(m, _cfg), power ?? 0, now);
+        bool riding = Riding(m, _cfg);
+        Session.Tick(dt, Session.IsPedalling(power, cadence), riding, power ?? 0, now);
+        Activities?.Tick(Session, riding, power, cadence, _src.HeartRateBpm, m.GameSpeedMs, m.SpeedMs, dt, now);
         _sessionLine = Session.Describe();
 
         if (!_src.Muted) _mod.SendTrainer(power ?? 0, cadence, _src.HeartRateBpm, connected: trainerUp && power.HasValue);
@@ -185,6 +193,10 @@ public sealed class RideLoop
 
         Step(_src.Control, m, Session.ErgTargetW, trainerUp, now, ct);
     }
+
+    /// <summary>The ride is over (the window closed, the bridge stopped): a workout still running, or the free ride, gets its activity file
+    /// when it was ridden at all. Called when <see cref="RunAsync"/> ends; tests call it themselves.</summary>
+    internal void StopActivity(DateTime now) => Activities?.Stop(now);
 
     /// <summary>The `status` message for the mod's HUD and the console line, once a second.</summary>
     private void Status()

@@ -6,7 +6,7 @@ using System.IO;
 using System.Xml;
 
 // Pure logic (no Unity, no logging), bridge-only (bridge/DescendersBridge.csproj links this file; the mod leaves it out).
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>One &lt;activity&gt; inside a <see cref="PlanBlock"/> (docs/PLANS.md "Plan format").</summary>
     internal sealed class PlanActivity

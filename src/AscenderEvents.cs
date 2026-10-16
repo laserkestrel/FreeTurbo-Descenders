@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Observes the game's "Ascender" (a completed climb): AscendersTriggerFinishLine (bottom) -> State_InGame.EnteredFinishArea sets a
@@ -27,7 +27,7 @@ namespace DescendersCyclingPOC
         public static void Install(AutoSteer auto, PlayerProbe probe)
         {
             _auto = auto; _probe = probe;
-            var harmony = new HarmonyLib.Harmony("descenders.cycling.poc.ascender");
+            var harmony = new HarmonyLib.Harmony("freeturbo.descenders.ascender");
             BindingFlags bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
             MethodInfo start = typeof(State_InGame).GetMethod("EnteredStartArea", bf);
             MethodInfo finish = typeof(State_InGame).GetMethod("EnteredFinishArea", bf);

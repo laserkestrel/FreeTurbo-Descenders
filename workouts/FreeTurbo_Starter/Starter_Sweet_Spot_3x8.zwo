@@ -1,0 +1,22 @@
+<workout_file>
+  <author>FreeTurbo-Descenders</author>
+  <name>Starter Sweet Spot 3x8</name>
+  <description>Week 2 of the FreeTurbo Starter plan. Three 8 minute efforts at 88% of FTP with 3 minutes easy between them. Sweet spot is hard but sustainable: focused breathing, steady cadence.</description>
+  <sportType>bike</sportType>
+  <durationType>time</durationType>
+  <tags/>
+  <workout>
+    <Warmup Duration="600" PowerLow="0.40" PowerHigh="0.75" pace="0">
+      <textevent timeoffset="5" message="Warm-up. Three sweet spot efforts."/>
+      <textevent timeoffset="540" message="One minute to the first effort."/>
+    </Warmup>
+    <IntervalsT Repeat="3" OnDuration="480" OffDuration="180" OnPower="0.88" OffPower="0.55" pace="0">
+      <textevent timeoffset="5" message="Effort 1 of 3. Settle in."/>
+      <textevent timeoffset="665" message="Effort 2 of 3. Hold it steady."/>
+      <textevent timeoffset="1325" message="Last effort. You have this."/>
+    </IntervalsT>
+    <Cooldown Duration="420" PowerLow="0.60" PowerHigh="0.40" pace="0">
+      <textevent timeoffset="5" message="All done. Spin it out."/>
+    </Cooldown>
+  </workout>
+</workout_file>

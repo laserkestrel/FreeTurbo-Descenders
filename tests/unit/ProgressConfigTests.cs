@@ -1,5 +1,5 @@
 using DescendersBridge.Ant;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 

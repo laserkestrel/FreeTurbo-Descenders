@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// EXPERIMENT (docs/SPECTATORS.md): a gang of copies of the rider standing beside the course, off the bike, arms up, cheering.
@@ -25,10 +25,11 @@ namespace DescendersCyclingPOC
         //            hand target by IK (clap, hands on hips, cupped hands). The directions are springs, the forearm softer than the upper arm, which gives
         //            lag, follow-through and smooth style changes. The hand is twisted about the forearm so the thumb points where the style wants.
         // Timing uses shaped cycles (fast up and slow down, a clap that holds on contact) on a per-spectator clock whose tempo drifts with Perlin noise.
-        private enum Style { Idle, Hips, Wave, Clap, FistPump, Shout, Pump, Jump }
+        private enum Style { Idle, Hips, Wave, Clap, FistPump, Shout, Pump, Jump, Clip, Run }   // Clip: a motion-capture clip, see "motion capture" below; Run: not in either set, only while dodging the rider
         private static readonly Style[] CalmSet = { Style.Idle, Style.Hips, Style.Wave, Style.Clap, Style.Idle, Style.Clap, Style.Hips, Style.FistPump };
         private static readonly Style[] ExcitedSet = { Style.Pump, Style.Jump, Style.FistPump, Style.Wave, Style.Shout, Style.Clap, Style.Pump, Style.Jump };
 
+        private enum Dodge { None, Flee, Away, Return }   // out of the rider's way: running off the line, standing watching, walking back
         private struct Spring { public Vector3 X, V; }         // a unit direction with a velocity
 
         private sealed class Cheerer
@@ -52,15 +53,34 @@ namespace DescendersCyclingPOC
             public float NextChange, ReactAt = -1f, Clock, P, Crouch;   // P: phase 0..1 in the current style's cycle; Crouch 0..1 in a jump's dip
             public Spring UL, FL, UR, FR, TL, TR;              // upper arm, forearm and thumb directions
             public float Yaw, YawV, Pitch, PitchV, Lean, LeanV, PY, PYV, FY, FYV, YawHold;   // look (degrees), lean (rad), pelvis and feet height (m)
-            public Transform[][] FingersL, FingersR;           // per finger the joints from the knuckle out (the last one is the tip)
+            public Transform[][] FingersL, FingersR;           // per finger the joints that bend, from the knuckle out (see Fingers)
             public Vector3 PalmL, PalmR;                       // palm normal in the wrist's local frame
             public float CurlL, CurlLV, CurlR, CurlRV;         // 0 open hand .. 1 fist
             public int Body = -1;                              // rider body type index, -1 = the rider's own
+            public int Skin = -1;                              // index into the game's skin palette, -1 = the rider's own tint
             public int Noise = -1;                             // index into Config.SpectatorNoiseEvents, -1 = empty-handed
             public float NoiseAt = -1f;                        // when the noisemaker sounds next (-1 = not excited)
-            public int RingsLeft;                              // further rings still to come in this shake of a bell
+            public int RingsLeft;                              // further sounds still to come in this shake of a bell / burst of a horn
             public float RingAt;
+            public bool PapOn;                                 // a horn's short pap is sounding: faded and cut by Noisemaker
+            public FMOD.Studio.EventInstance Pap;
+            public float PapStart, PapLevel;
             public System.Random Rng;
+            // motion capture (null ClipBone = this rig cannot play clips)
+            public Transform[] ClipBone; public Quaternion[] ClipRest;    // per MocapBone: the bone, and its world rotation in the clip's rest pose
+            public Vector3 ClipLeft; public float ClipSign, LegLen;
+            public MocapClip Clip; public float ClipT, ClipW, ClipRate;   // the clip playing, seconds into it, how much of the pose is the clip's (0..1)
+            public Vector3[] HandL, HandR;                                // in the wrist's own frame: along the fingers, out of the palm, to the thumb side (unit, square to each other)
+            public float AimW;                                            // how much the hands are turned to point ahead (a clap), 0..1
+            public bool Animal;                                     // wears a whole animal's head (SpectatorRules.IsAnimalHead): plays the clips
+            // getting out of the rider's way: the frame the skeleton is built in is the rest frame moved by Disp and turned by Heading
+            public Dodge State;
+            public Vector3 Disp, Org, DodgeDir;                // Org = BasePos + Disp (where the feet are); Disp.y follows the ground
+            public float Heading, DodgeSpeed, DodgeLeft, DodgeGoAt, AwaySince, GaitP, GroundY, DodgeRun;
+            public bool FrameSet;                              // the moved frame was applied last frame (so the rest frame is put back when it ends)
+            public Vector3 FwdB, LeftB, AnkleL0B, AnkleR0B;    // the rest frame
+            public Quaternion ChestRestB, AnkleRestLB, AnkleRestRB, RootRot0;
+            public Quaternion FrameRot = Quaternion.identity;  // this frame's turn of the rest frame (the clips' axes and rest rotations are turned by it)
         }
 
         private GameObject _root;
@@ -68,26 +88,64 @@ namespace DescendersCyclingPOC
         public bool Active { get { return _root != null; } }
         public int Count;
 
+        private bool _wanted, _owed;     // the rider turned the crowd on; a new course owes it one
+        /// <summary>Party mode is on (F10): the rider wants the crowd, whether or not it is out yet. The day cycle goes with it.</summary>
+        public bool Wanted { get { return _wanted; } }
+        private float _owedAt;
+        private int _owedTries;
+
         public void Toggle(PlayerProbe probe, PathTrack track)
         {
-            if (Active) { Clear("key"); return; }
-            try { Spawn(probe, track); }
+            _owed = false;
+            if (Active) { _wanted = false; Clear("key"); return; }
+            _wanted = true;
+            try { Spawn(probe, track, false); }
             catch (Exception ex) { Log.Error("Spectators: spawn failed", ex); Clear("error"); }
+        }
+
+        /// <summary>A new course (scene load, or the next level of a session in the same scene): the old crowd goes, and comes back by itself
+        /// on the new course when the rider had it on.</summary>
+        public void NewCourse(string why, float now)
+        {
+            Clear(why);
+            _owed = _wanted; _owedTries = 0; _owedAt = now + CourseRules.CrowdFirstS;
+        }
+
+        /// <summary>Per-frame: start placing the crowd a new course owes, as soon as its path is loaded and the rider is in the world; a spawn
+        /// that placed nobody (the ground was not there yet) is tried again (FinishSpawn).</summary>
+        public void TickOwed(PlayerProbe probe, PathTrack track, bool worldReady, float now)
+        {
+            if (_job != null || !CourseRules.CrowdNow(_owed, track.Loaded, worldReady && probe.Player != null, now, _owedAt)) return;
+            _owedTries++;
+            bool started = false;
+            try { started = Spawn(probe, track, true); }
+            catch (Exception ex) { Log.Error("Spectators: spawn on the new course failed", ex); Clear("error"); _owed = false; return; }
+            if (started) return;
+            if (CourseRules.CrowdAgain(0, _owedTries)) _owedAt = now + CourseRules.CrowdWaitS; else _owed = false;
         }
 
         public void Clear(string why)
         {
+            if (_job != null)   // still being placed: the template and the garment templates go with it
+            {
+                if (_job.holder != null) UnityEngine.Object.Destroy(_job.holder);
+                _clothCache.Clear();
+                _job = null;
+            }
             if (_root != null) UnityEngine.Object.Destroy(_root);
             if (_root != null || Count > 0) Log.Info("Spectators: removed (" + why + ")");
             _root = null; Count = 0; _cheerers.Clear();
+            _shotOf = null; _shotLeft = 0; _handShotIn = 0; _styleArmed = false; _axes.Clear();   // the axis lines went with their spectator
         }
 
         /// <summary>Per-frame: cull the far ones, let the near ones react to the rider, and animate whatever is drawn.</summary>
         public void Tick(float time, Vector3 riderPos, bool haveRider)
         {
-            float dt = Mathf.Clamp(time - _now, 0f, 0.05f);
+            float raw = time - _now;
+            float dt = Mathf.Clamp(raw, 0f, 0.05f);
             _now = time;
             if (_cheerers.Count == 0) return;
+            TrackRider(riderPos, haveRider, raw);
             _watch.Reset(); _watch.Start();
             int shown = 0;
             float cull2 = Config.SpectatorCullM * Config.SpectatorCullM;
@@ -96,24 +154,30 @@ namespace DescendersCyclingPOC
             foreach (Cheerer c in _cheerers)
             {
                 if (c.Root == null) continue;
-                float d2 = haveRider ? (c.BasePos - riderPos).sqrMagnitude : float.MaxValue;
+                float d2 = haveRider ? (c.Org - riderPos).sqrMagnitude : float.MaxValue;
                 if (haveRider)   // only the ones near the rider are drawn and animated: hundreds of skinned meshes would cost frames for nothing
                 {
                     bool show = d2 <= cull2;
-                    if (show != c.Shown) { c.Root.gameObject.SetActive(show); c.Shown = show; }
+                    if (show != c.Shown) { c.Root.gameObject.SetActive(show); c.Shown = show; if (!show) DodgeHome(c, time); }
                 }
                 if (!c.Shown) continue;
                 shown++;
 
-                bool want = c.Excited ? d2 < far2 : d2 < near2;
-                if (want == c.Excited) c.ReactAt = -1f;
-                else if (c.ReactAt < 0f) c.ReactAt = time + 0.15f + (float)c.Rng.NextDouble() * 0.5f;   // people react a beat late, each at their own pace
-                else if (time >= c.ReactAt) { ChangeStyle(c, want, time); c.ReactAt = -1f; }
-                if (time >= c.NextChange) ChangeStyle(c, c.Excited, time);
+                if (Config.SpectatorDodge && c != _shotOf) DodgeTick(c, time, dt, riderPos, haveRider);
+                if (c.Cur != Style.Run)   // running out of the way: no style change until they are standing again
+                {
+                    bool want = c.Excited ? d2 < far2 : d2 < near2;
+                    if (c == _shotOf) { }   // being drawn for the developer: stays in its clip
+                    else if (want == c.Excited) c.ReactAt = -1f;
+                    else if (c.ReactAt < 0f) c.ReactAt = time + 0.15f + (float)c.Rng.NextDouble() * 0.5f;   // people react a beat late, each at their own pace
+                    else if (time >= c.ReactAt) { ChangeStyle(c, want, time); c.ReactAt = -1f; }
+                    if (time >= c.NextChange && c != _shotOf) ChangeStyle(c, c.Excited, time);
+                }
                 if (c.Noise >= 0) Noisemaker(c, time);
                 Animate(c, dt, time, riderPos, haveRider && d2 < look2);
             }
             _watch.Stop();
+            TickShots();
             if (shown > 0) { _perfTicks += _watch.ElapsedTicks; _perfFrames++; _perfShown += shown; }
             if (time >= _perfLogAt)
             {
@@ -124,28 +188,229 @@ namespace DescendersCyclingPOC
             }
         }
 
+        // ---- getting out of the rider's way ----------------------------------------------------------------------------------------------
+        // Spectators have no colliders, so a rider who left the course rode straight through them. Now one the rider would reach within a
+        // second or two (SpectatorRules.Threatened) turns and runs sideways off the rider's line, never onto the track or up a wall, stands
+        // watching the rider for a few seconds, and walks back to the place. The skeleton is built in a moved and turned copy of the rest frame
+        // (SetFrame); the run is the leg IK with the feet swinging (Animate) and the arms of Style.Run (ArmTarget).
+
+        private float[] _pathX, _pathZ;           // the whole course, for "is this on the track"
+        private Vector3 _riderVel, _lastRider;
+        private bool _haveLast;
+        private int _groundMask = int.MinValue;
+        private int _dodges;
+
+        /// <summary>The rider's horizontal velocity, from the position over frames, smoothed a little (the rider is moved in physics steps).</summary>
+        private void TrackRider(Vector3 riderPos, bool have, float raw)
+        {
+            if (!have) { _riderVel = Vector3.zero; _haveLast = false; return; }
+            if (_haveLast && raw > 1e-4f)
+            {
+                Vector3 v = (riderPos - _lastRider) / raw;
+                v.y = 0f;
+                if (v.magnitude > 60f) v = Vector3.zero;   // a respawn or a teleport is not a speed
+                _riderVel = Vector3.Lerp(_riderVel, v, 1f - Mathf.Exp(-raw / 0.08f));
+            }
+            _lastRider = riderPos; _haveLast = true;
+        }
+
+        private bool GroundAt(float x, float z, float nearY, out float y)
+        {
+            if (_groundMask == int.MinValue) _groundMask = GroundMask();
+            RaycastHit hit;
+            y = nearY;
+            if (!Physics.Raycast(new Vector3(x, nearY + 1.2f, z), Vector3.down, out hit, 4f, _groundMask, QueryTriggerInteraction.Ignore)) return false;
+            y = hit.point.y;
+            return hit.normal.y >= SpectatorRules.MinNormalY;
+        }
+
+        /// <summary>Back to the place, standing, at once (the spectator is out of sight, or the course changed).</summary>
+        private void DodgeHome(Cheerer c, float time)
+        {
+            if (c.State == Dodge.None && c.Heading == 0f && c.Disp == Vector3.zero && c.Cur != Style.Run) return;
+            c.State = Dodge.None; c.Disp = Vector3.zero; c.Org = c.BasePos; c.Heading = 0f; c.DodgeSpeed = 0f; c.FrameSet = true;   // FrameSet: Animate puts the rest frame back
+            if (c.Cur == Style.Run) ChangeStyle(c, c.Excited, time);
+        }
+
+        private static float AngleTo(Vector3 from, Vector3 dir) { return Vector3.SignedAngle(from, new Vector3(dir.x, 0f, dir.z), Vector3.up); }
+
+        /// <summary>One frame of one spectator's getting out of the way (state machine: None, Flee, Away, Return).</summary>
+        private void DodgeTick(Cheerer c, float time, float dt, Vector3 riderPos, bool have)
+        {
+            Vector3 pos = c.Org;
+            float lat = 0f;
+            bool threat = false;
+            if (have && dt > 0f)
+                threat = SpectatorRules.Threatened(pos.x - riderPos.x, pos.z - riderPos.z, _riderVel.x, _riderVel.z, out lat);
+
+            if (threat && c.State != Dodge.Flee) TryFlee(c, time, lat);
+
+            float headingT = c.Heading;
+            bool walking = false;
+            switch (c.State)
+            {
+                case Dodge.None:
+                    headingT = 0f;
+                    break;
+
+                case Dodge.Flee:
+                {
+                    headingT = AngleTo(c.FwdB, c.DodgeDir);
+                    if (time < c.DodgeGoAt) break;   // a beat to realise
+                    if (c.Cur != Style.Run) { c.Cur = Style.Run; c.Excited = true; c.ReactAt = -1f; }
+                    float turn = Mathf.Abs(Mathf.DeltaAngle(c.Heading, headingT));
+                    c.DodgeSpeed = Mathf.MoveTowards(c.DodgeSpeed, c.DodgeRun * Mathf.Clamp01(1.2f - turn / 90f), 30f * dt);
+                    float step = c.DodgeSpeed * dt;
+                    if (step > 0f && !MoveBy(c, c.DodgeDir * step)) { c.State = Dodge.Away; c.AwaySince = time; break; }
+                    c.DodgeLeft -= step;
+                    if (c.DodgeLeft <= 0f) { c.State = Dodge.Away; c.AwaySince = time; }
+                    break;
+                }
+
+                case Dodge.Away:
+                {
+                    Vector3 toRider = riderPos - pos;
+                    if (have && toRider.sqrMagnitude < 30f * 30f && toRider.sqrMagnitude > 1f) headingT = AngleTo(c.FwdB, toRider);   // face the rider
+                    float held = time - c.AwaySince;
+                    bool homeThreat = false; float hl;
+                    if (have) homeThreat = SpectatorRules.Threatened(c.BasePos.x - riderPos.x, c.BasePos.z - riderPos.z, _riderVel.x, _riderVel.z, out hl);
+                    float hold = SpectatorRules.DodgeHoldMinS + (SpectatorRules.DodgeHoldMaxS - SpectatorRules.DodgeHoldMinS) * c.Variant;
+                    float dist = have ? new Vector3(toRider.x, 0f, toRider.z).magnitude : float.MaxValue;
+                    if ((held >= hold && SpectatorRules.MayReturn(held, homeThreat, dist)) || (!have && held > hold))
+                    { c.State = Dodge.Return; c.DodgeRun = SpectatorRules.DodgeWalkMs * (0.9f + 0.2f * (float)c.Rng.NextDouble()); }
+                    break;
+                }
+
+                case Dodge.Return:
+                {
+                    Vector3 home = c.BasePos - c.Org; home.y = 0f;
+                    float left = home.magnitude;
+                    if (left < 0.15f) { c.Disp = Vector3.zero; c.Org = c.BasePos; c.State = Dodge.None; break; }
+                    Vector3 dir = home / left;
+                    headingT = AngleTo(c.FwdB, dir);
+                    if (c.Cur != Style.Run) { c.Cur = Style.Run; c.Excited = false; c.ReactAt = -1f; }
+                    walking = true;
+                    float turn = Mathf.Abs(Mathf.DeltaAngle(c.Heading, headingT));
+                    c.DodgeSpeed = Mathf.MoveTowards(c.DodgeSpeed, c.DodgeRun * Mathf.Clamp01(1.2f - turn / 90f), 6f * dt);
+                    float step = Mathf.Min(c.DodgeSpeed * dt, left);
+                    if (step > 0f && !MoveBy(c, dir * step)) { c.Disp = Vector3.zero; c.Org = c.BasePos; c.State = Dodge.None; }   // blocked on the way back: stand at the place
+                    break;
+                }
+            }
+
+            if (c.State != Dodge.Flee && !walking)   // standing again: the speed runs out, and the style goes back to cheering once they have stopped
+            {
+                c.DodgeSpeed = Mathf.MoveTowards(c.DodgeSpeed, 0f, 14f * dt);
+                if (c.Cur == Style.Run && c.DodgeSpeed < 0.05f && c.State != Dodge.Flee) ChangeStyle(c, c.State == Dodge.Away || c.Excited, time);
+            }
+            if (c.State == Dodge.None && c.Heading == 0f && c.DodgeSpeed <= 0f) return;
+            float rate = c.State == Dodge.Flee ? 720f : c.State == Dodge.Return ? 240f : 200f;
+            c.Heading = Mathf.MoveTowardsAngle(c.Heading, headingT, rate * dt);
+            if (c.State == Dodge.None && Mathf.Abs(c.Heading) < 0.5f) c.Heading = 0f;
+            float hz, sw, lf;
+            SpectatorRules.Gait(c.DodgeSpeed, out hz, out sw, out lf);
+            c.GaitP += hz * dt; c.GaitP -= Mathf.Floor(c.GaitP);
+        }
+
+        /// <summary>The rider is coming at a spectator: pick the way out, if there is one, and start.</summary>
+        private void TryFlee(Cheerer c, float time, float lateral)
+        {
+            float ex, ez;
+            SpectatorRules.EscapeDir(_riderVel.x, _riderVel.z, lateral, c.Variant - 0.5f, out ex, out ez);
+            float dist = SpectatorRules.RunDistance(lateral);
+            // only ever away from the rider's line (the other side is across it); a way that ends near the track is run shorter, or not at all
+            for (int tryN = 0; tryN < 2; tryN++)
+            {
+                if (tryN == 1) dist = 1.5f;
+                Vector3 dir = new Vector3(ex, 0f, ez);
+                Vector3 dest = c.Org + dir * dist;
+                if (SpectatorRules.NearTrack(_pathX, _pathZ, dest.x, dest.z)) continue;   // not onto the track
+                float y;
+                if (!GroundAt(c.Org.x, c.Org.z, c.Org.y, out y)) return;
+                c.GroundY = y;
+                c.State = Dodge.Flee; c.DodgeDir = dir; c.DodgeLeft = dist;
+                c.DodgeRun = SpectatorRules.DodgeRunMs * (0.9f + 0.2f * (float)c.Rng.NextDouble());
+                c.DodgeGoAt = time + 0.08f + 0.22f * (float)c.Rng.NextDouble();
+                if (++_dodges <= 5) Log.Info("Spectators: #" + c.Id + " gets out of the rider's way (rider " + _riderVel.magnitude.ToString("F1") + " m/s, " + Mathf.Abs(lateral).ToString("F1") + " m off the line, runs " + dist.ToString("F1") + " m)");
+                return;
+            }
+        }
+
+        /// <summary>Move the spectator by a horizontal step if the ground there is fit to run on. False = blocked (a wall, a drop, the track, no ground).</summary>
+        private bool MoveBy(Cheerer c, Vector3 step)
+        {
+            Vector3 np = c.Org + step;
+            float len = step.magnitude;
+            if (len < 1e-5f) return true;
+            if (SpectatorRules.NearTrack(_pathX, _pathZ, np.x, np.z) && c.State == Dodge.Flee) return false;   // (walking back may cross it: the place itself is off the track)
+            float y;
+            if (!GroundAt(np.x, np.z, c.GroundY, out y) || !SpectatorRules.StepOk(y - c.GroundY, len)) return false;
+            if (_groundMask == int.MinValue) _groundMask = GroundMask();
+            RaycastHit hit;   // a tree trunk, a rock, a fence in the way
+            if (Physics.Raycast(new Vector3(c.Org.x, c.GroundY + 0.6f, c.Org.z), step / len, out hit, len + 0.6f, _groundMask, QueryTriggerInteraction.Ignore) && hit.normal.y < 0.6f) return false;
+            c.Disp += new Vector3(step.x, y - c.GroundY, step.z);
+            c.GroundY = y;
+            c.Org = c.BasePos + c.Disp;
+            return true;
+        }
+
+        /// <summary>Build this frame's frame from the rest one: moved by Disp, turned by Heading about the place.</summary>
+        private static void SetFrame(Cheerer c)
+        {
+            Quaternion r = Quaternion.AngleAxis(c.Heading, Vector3.up);
+            c.Org = c.BasePos + c.Disp;
+            c.Fwd = r * c.FwdB; c.Left = r * c.LeftB;
+            c.AnkleL0 = c.Org + r * (c.AnkleL0B - c.BasePos);
+            c.AnkleR0 = c.Org + r * (c.AnkleR0B - c.BasePos);
+            c.ChestRest = r * c.ChestRestB; c.AnkleRestL = r * c.AnkleRestLB; c.AnkleRestR = r * c.AnkleRestRB;
+            c.FrameRot = r;
+            c.Root.rotation = r * c.RootRot0;
+        }
+
         private float _noiseFree;   // no two noisemakers start within NoiseSpacingS of each other: a crowd, not a wall of sound
         private const float NoiseSpacingS = 0.3f;
         private const float BellRingS = 0.22f;   // between the rings of one bell shake (the samples are 0.4-0.8 s, so they overlap like a real shaken bell)
 
-        /// <summary>An excited spectator with a noisemaker sounds it a beat after getting excited (a bell is shaken: SpectatorBellRings rings), then every SpectatorNoiseGapS or so, from their head.</summary>
+        /// <summary>
+        /// An excited spectator with a noisemaker sounds it a beat after getting excited, then every SpectatorNoiseGapS or so, from their head.
+        /// A bell is shaken (SpectatorBellRings rings). A horn or vuvuzela gives 2 to 4 short paps and then the full hoot (SpectatorRules):
+        /// a pap is the same sound, faded and cut after PapS.
+        /// </summary>
         private void Noisemaker(Cheerer c, float time)
         {
             string[] ev = Config.SpectatorNoiseEvents;
             if (c.Noise >= ev.Length) return;
-            Vector3 at = c.Head != null ? c.Head.position : c.Root.position + Vector3.up * 1.6f;
-            if (c.RingsLeft > 0 && time >= c.RingAt)   // the rest of a bell shake: not held back by the spacing, it is one gesture
+            if (c.PapOn)
             {
-                Sfx.PlayAt(ev[c.Noise], at, Config.SpectatorNoiseVolume * (0.8f + 0.2f * (float)c.Rng.NextDouble()));
-                c.RingsLeft--; c.RingAt = time + BellRingS * (0.8f + 0.4f * (float)c.Rng.NextDouble());
+                float level = SpectatorRules.PapLevel(time - c.PapStart);
+                if (level <= 0f) { Sfx.Cut(c.Pap); c.PapOn = false; }
+                else Sfx.SetLevel(c.Pap, c.PapLevel * level);
+            }
+            bool horn = SpectatorRules.IsHorn(ev[c.Noise]);
+            if (c.RingsLeft > 0 && time >= c.RingAt)   // the rest of a bell shake or a horn burst: not held back by the spacing, it is one gesture
+            {
+                c.RingsLeft--;
+                Sound(c, ev[c.Noise], SpectatorRules.IsPap(horn, c.RingsLeft), time);
+                c.RingAt = time + (horn ? SpectatorRules.PapGapS : BellRingS) * (0.8f + 0.4f * (float)c.Rng.NextDouble());
             }
             if (!c.Excited) { c.NoiseAt = -1f; return; }
             if (c.NoiseAt < 0f) { c.NoiseAt = time + 0.2f + (float)c.Rng.NextDouble() * 1.3f; return; }
-            if (time < c.NoiseAt || time < _noiseFree) return;
-            Sfx.PlayAt(ev[c.Noise], at, Config.SpectatorNoiseVolume * (0.8f + 0.2f * (float)c.Rng.NextDouble()));
-            if (ev[c.Noise].IndexOf("bell", StringComparison.OrdinalIgnoreCase) >= 0) { c.RingsLeft = Config.SpectatorBellRings - 1; c.RingAt = time + BellRingS * (0.8f + 0.4f * (float)c.Rng.NextDouble()); }
-            c.NoiseAt = time + Config.SpectatorNoiseGapS * (1f + (float)c.Rng.NextDouble());
+            if (time < c.NoiseAt || time < _noiseFree || c.RingsLeft > 0) return;
+            c.RingsLeft = horn ? SpectatorRules.HornPaps(c.Rng.NextDouble()) : ev[c.Noise].IndexOf("bell", StringComparison.OrdinalIgnoreCase) >= 0 ? Config.SpectatorBellRings - 1 : 0;
+            Sound(c, ev[c.Noise], SpectatorRules.IsPap(horn, c.RingsLeft), time);
+            c.RingAt = time + (horn ? SpectatorRules.PapGapS : BellRingS) * (0.8f + 0.4f * (float)c.Rng.NextDouble());
+            c.NoiseAt = time + Config.SpectatorNoiseGapS * (1f + (float)c.Rng.NextDouble()) + (horn ? c.RingsLeft * SpectatorRules.PapGapS + SpectatorRules.HornRestS : 0f);
             _noiseFree = time + NoiseSpacingS;
+        }
+
+        private void Sound(Cheerer c, string path, bool pap, float time)
+        {
+            Vector3 at = c.Head != null ? c.Head.position : c.Root.position + Vector3.up * 1.6f;
+            float volume = Config.SpectatorNoiseVolume * (0.8f + 0.2f * (float)c.Rng.NextDouble());
+            if (!pap) { Sfx.PlayAt(path, at, volume); return; }
+            if (c.PapOn) { Sfx.Cut(c.Pap); c.PapOn = false; }
+            c.PapOn = Sfx.StartAt(path, at, volume, true, out c.Pap, out c.PapLevel);
+            c.PapStart = time;
         }
 
         private readonly System.Diagnostics.Stopwatch _watch = new System.Diagnostics.Stopwatch();
@@ -184,8 +449,8 @@ namespace DescendersCyclingPOC
                 Vector3 sp = cam.WorldToScreenPoint(anchor);
                 if (sp.z <= 0f) continue;
                 _labelText.Length = 0;
-                _labelText.Append('#').Append(c.Id).Append(' ').Append(c.Cur)
-                    .Append(c.Excited ? " (excited)" : "").Append(c.Body >= 0 ? "  body " + c.Body : "").Append(c.Noise >= 0 ? "  noise " + c.Noise : "")
+                _labelText.Append('#').Append(c.Id).Append(' ').Append(c.Cur == Style.Clip && c.Clip != null ? c.Clip.Name : c.Cur.ToString())
+                    .Append(c.Excited ? " (excited)" : "").Append(c.Body >= 0 ? "  body " + c.Body : "").Append(c.Skin >= 0 ? "  skin " + c.Skin : "").Append(c.Noise >= 0 ? "  noise " + c.Noise : "")
                     .Append("\nspd ").Append(c.Speed.ToString("F2")).Append("  amp ").Append(c.Amp.ToString("F2"))
                     .Append("  ").Append(c.Handed > 0f ? "L" : "R").Append("  next ").Append(Mathf.Max(0f, c.NextChange - _now).ToString("F0")).Append('s');
                 string text = _labelText.ToString();
@@ -200,10 +465,23 @@ namespace DescendersCyclingPOC
             Style[] set = excited ? ExcitedSet : CalmSet;
             Style next = set[c.Rng.Next(set.Length)];
             if (next == c.Cur && excited == c.Excited) next = set[c.Rng.Next(set.Length)];   // one re-roll against repeats
+            // the ones with an animal's head mime the animal (the motion-capture clips), all the time; everyone else cheers
+            bool clip = Config.SpectatorAnimalClips && c.Animal && c.ClipBone != null && _clips.Length > 0;
+            if (clip)
+            {
+                next = Style.Clip;
+                MocapClip pick = _clips[c.Rng.Next(_clips.Length)];
+                if (c.Cur != Style.Clip || !object.ReferenceEquals(pick, c.Clip))   // the same clip again just plays on
+                {
+                    c.Clip = pick;
+                    c.ClipT = (float)c.Rng.NextDouble() * pick.Seconds;   // everyone somewhere else in it
+                    c.ClipRate = 0.9f + (float)c.Rng.NextDouble() * 0.2f;
+                }
+            }
             c.Cur = next;
             c.Excited = excited;
             c.Clock = 0f;   // every cycle starts from standing, so no style begins in mid-air; the springs carry the arms across
-            c.NextChange = time + 6f + (float)c.Rng.NextDouble() * 8f;
+            c.NextChange = time + (clip ? 12f : 6f) + (float)c.Rng.NextDouble() * 8f;
             c.Speed = (excited ? 1.25f : 0.8f) * (0.85f + (float)c.Rng.NextDouble() * 0.3f);   // the excited crowd is faster
             c.Amp = 0.85f + (float)c.Rng.NextDouble() * 0.3f;
             c.Variant = (float)c.Rng.NextDouble();
@@ -230,6 +508,8 @@ namespace DescendersCyclingPOC
         /// <summary>One frame of one spectator: rest pose, then body, torso and look, legs, arms (see the comment at the top of the class).</summary>
         private void Animate(Cheerer c, float dt, float time, Vector3 riderPos, bool track)
         {
+            bool moved = c.State != Dodge.None || c.Heading != 0f || c.Disp != Vector3.zero;
+            if (moved || c.FrameSet) { SetFrame(c); c.FrameSet = moved; }   // the rest frame is put back once, when the dodge is over
             for (int i = 0; i < c.Anim.Length; i++) c.Anim[i].localRotation = c.RestLocal[i];
 
             c.Clock += dt * c.Speed * (0.85f + 0.3f * Mathf.PerlinNoise(time * 0.23f, c.Id * 3.7f));   // the tempo drifts a little
@@ -259,7 +539,7 @@ namespace DescendersCyclingPOC
                 c.YawHold = yawT;
             }
             if (c.Cur == Style.Shout) pitchT += 10f;
-            float leanT = c.Excited ? 0.10f : 0.02f;
+            float leanT = c.Cur == Style.Run ? 0.12f + 0.2f * Mathf.Clamp01(c.DodgeSpeed / SpectatorRules.DodgeRunMs) : c.Excited ? 0.10f : 0.02f;   // a runner leans into it
             for (int s = 0; s < steps; s++)
             {
                 Step(ref c.PY, ref c.PYV, py, 30f, 1f, h);
@@ -272,7 +552,7 @@ namespace DescendersCyclingPOC
             c.Crouch = c.Cur == Style.Jump ? Mathf.Clamp01(dip / 0.105f) : 0f;
 
             // body: without leg IK the whole figure can only move up (the old bob)
-            c.Root.position = c.BasePos + Vector3.up * (c.Legs ? c.PY : c.FY) + c.Left * shift;
+            c.Root.position = c.Org + Vector3.up * (c.Legs ? c.PY : c.FY) + c.Left * shift;
 
             // torso: hips roll with the weight shift and the shoulders counter it; lean (more in a crouch, to stay balanced); breathing; the look
             float lean = c.Lean + dip * 1.8f;
@@ -295,9 +575,17 @@ namespace DescendersCyclingPOC
             // legs: feet planted (or in the air in a jump), knees forward and a little out, feet flat
             if (c.Legs)
             {
-                Vector3 lift = Vector3.up * c.FY;
-                TwoBone(c.HipL, c.KneeL, c.AnkleL, c.AnkleL0 + lift, c.Fwd + c.Left * 0.15f);
-                TwoBone(c.HipR, c.KneeR, c.AnkleR, c.AnkleR0 + lift, c.Fwd - c.Left * 0.15f);
+                Vector3 lift = Vector3.up * c.FY, stepL = Vector3.zero, stepR = Vector3.zero;
+                if (c.Cur == Style.Run)   // a run: each foot swings forward lifted and goes back on the ground, half a cycle apart
+                {
+                    float hz, swing, up;
+                    SpectatorRules.Gait(c.DodgeSpeed, out hz, out swing, out up);
+                    float a = c.GaitP * 2f * Mathf.PI;
+                    stepL = c.Fwd * (swing * Mathf.Sin(a)) + Vector3.up * (up * Mathf.Max(0f, Mathf.Cos(a)));
+                    stepR = c.Fwd * (swing * -Mathf.Sin(a)) + Vector3.up * (up * Mathf.Max(0f, -Mathf.Cos(a)));
+                }
+                TwoBone(c.HipL, c.KneeL, c.AnkleL, c.AnkleL0 + lift + stepL, c.Fwd + c.Left * 0.15f);
+                TwoBone(c.HipR, c.KneeR, c.AnkleR, c.AnkleR0 + lift + stepR, c.Fwd - c.Left * 0.15f);
                 c.AnkleL.rotation = c.AnkleRestL;
                 c.AnkleR.rotation = c.AnkleRestR;
             }
@@ -311,7 +599,7 @@ namespace DescendersCyclingPOC
             float kL, kR;
             ArmTarget(c, 1f, amp, time, out uL, out fL, out tL, out kL);
             ArmTarget(c, -1f, amp, time, out uR, out fR, out tR, out kR);
-            float w = c.Excited ? 22f : 16f;
+            float w = c.Cur == Style.Run ? 34f : c.Excited ? 22f : 16f;
             for (int s = 0; s < steps; s++)
             {
                 StepDir(ref c.UL, uL, w, 0.8f, h); StepDir(ref c.FL, fL, w * 0.8f, 0.6f, h); StepDir(ref c.TL, tL, 10f, 1f, h);
@@ -322,31 +610,391 @@ namespace DescendersCyclingPOC
             PointArm(c.ShoulderR, c.ElbowR, c.WristR, c.UR.X, c.FR.X);
             TwistHand(c.ElbowL, c.WristL, c.IndexL, c.PinkL, c.FL.X, c.TL.X);
             TwistHand(c.ElbowR, c.WristR, c.IndexR, c.PinkR, c.FR.X, c.TR.X);
+            // a clap: the forearms come in from the elbows at an angle, and hands that just went on along them crossed and passed through each
+            // other (rider, 2026-10-11). The hands are turned at the wrist to point the same way, ahead and up, so the palms meet flat.
+            c.AimW = Mathf.MoveTowards(c.AimW, c.Cur == Style.Clap ? 1f : 0f, dt / 0.25f);
+            if (c.AimW > 0f)
+            {
+                Vector3 ahead = N(c.F + c.U * 0.6f);
+                AimHand(c.WristL, c.HandL, ahead, Smooth(c.AimW));
+                AimHand(c.WristR, c.HandR, ahead, Smooth(c.AimW));
+            }
             CurlFingers(c.FingersL, c.WristL, c.PalmL, c.CurlL);
             CurlFingers(c.FingersR, c.WristR, c.PalmR, c.CurlR);
+
+            c.ClipW = Mathf.MoveTowards(c.ClipW, c.Cur == Style.Clip ? 1f : 0f, dt / ClipBlendS);
+            if (c.ClipW > 0f && c.Clip != null && c.ClipBone != null) PlayClip(c, dt);
+        }
+
+        // ---- motion capture --------------------------------------------------------------------------------------------------------------
+        // A clip (src\MocapClip.cs, made by tools\MocapBake, embedded in the mod as src\mocap\*.dmc) holds, per bone and frame, the rotation from
+        // the capture's rest pose in the character's own frame (left, up, forward). A spectator plays it on top of the idle pose: each of its
+        // bones is first turned to where the capture's rest pose has it (ClipRest, found once), then by the clip's rotation, parents first; the
+        // bones the clip has none for (fingers, collarbones, the spine joints in between) follow their parents. The figure is then stood on the
+        // ground by its lower ankle. Going into and out of a clip the pose is blended over ClipBlendS.
+
+        private const float ClipBlendS = 0.45f;
+        private static MocapClip[] _clips = new MocapClip[0];
+        private static bool _clipsLoaded, _handLogged;
+
+        // ---- pictures of one spectator, for the developer (the mod command `crowd_shot`; docs/SPECTATORS.md "Motion capture") ---------------------
+        // The spectator nearest the rider plays a clip from its start and is drawn count times, evenly through the clip (the same moments as the
+        // columns of the tool's sheet), by a camera of its own: from the front on the left of the picture, from the character's right on the right.
+
+        private const int ShotW = 420, ShotH = 620;
+        private Cheerer _shotOf;
+        private int _shotLeft, _shotCount;
+        private string _shotDir = "";
+
+        // The hands on top of a clip, for trying out (the mod commands `crowd_hand_roll` / `_flex` / `_side` / `_curl`; the defaults are Config's).
+        // Degrees, in the hand's own terms and the same on both hands: Roll about the fingers (positive: the palm turns towards the thumb side),
+        // Flex at the wrist (positive: the fingers go towards the palm), Side (positive: the fingers go towards the thumb side); Curl 0 = open
+        // hand .. 1 = fist.
+        public static float ClipHandRoll = Config.SpectatorClipHandRoll, ClipHandFlex = Config.SpectatorClipHandFlex, ClipHandSide = Config.SpectatorClipHandSide,
+                            ClipHandCurl = Config.SpectatorClipHandCurl;
+
+        /// <summary>The spectator the developer's pictures are of: the nearest drawn one that can play a clip, one with an animal's head if any.</summary>
+        private Cheerer PickForShot(Vector3 riderPos)
+        {
+            Cheerer best = null;
+            float bestD = float.MaxValue;
+            foreach (Cheerer c in _cheerers)
+            {
+                if (c.Root == null || !c.Shown || c.ClipBone == null) continue;
+                float d = (c.BasePos - riderPos).sqrMagnitude * (c.Animal ? 1f : 100f);   // they are the ones who play clips
+                if (d < bestD) { bestD = d; best = c; }
+            }
+            return best;
+        }
+
+        /// <summary>Start a row of pictures; the answer says what was started or why not.</summary>
+        public string StartShots(Vector3 riderPos, int count, string clipName, string dir)
+        {
+            if (_clips.Length == 0) return "no motion-capture clips";
+            Cheerer best = PickForShot(riderPos);
+            if (best == null) return "no spectator near the rider that can play a clip (" + _cheerers.Count + " placed)";
+            MocapClip clip = _clips[0];
+            foreach (MocapClip k in _clips) if (string.Equals(k.Name, clipName, StringComparison.OrdinalIgnoreCase)) clip = k;
+            ClearAxes();
+            best.Cur = Style.Clip; best.Clip = clip; best.ClipT = 0f; best.ClipRate = 1f; best.ClipW = 1f;
+            _shotOf = best; _shotCount = Mathf.Clamp(count, 1, 60); _shotLeft = _shotCount; _shotDir = dir; _handShotIn = 0; _styleArmed = false;
+            return "spectator #" + best.Id + " " + (best.BasePos - riderPos).magnitude.ToString("F0") + " m from the rider plays " + clip.Name + ": " + _shotCount + " pictures over " + clip.Seconds.ToString("F1") + " s into " + dir;
+        }
+
+        // ---- a close picture of the hands with their axes drawn (the mod command `crowd_hands <seconds into the clip>`) ----------------------------
+        // The same spectator, held still at one moment of the clip, from the front, from its right and from its left, with three lines from each
+        // wrist: red along the fingers (Roll turns about it), green out of the palm (Side turns about it), blue to the thumb side (Flex turns
+        // about it). The file name carries the moment and the hand numbers in force, so a row of tries can be laid side by side.
+
+        private int _handShotIn;
+
+        // ---- a picture of one of the hand-written styles at one moment of its cycle (the mod command `crowd_style <style number> <phase 0..1>`) ----
+        // The same spectator is put into that style, excited, and after the arms have settled is drawn the first time the cycle passes the
+        // phase: from the front, from its right and from above. Style numbers: 0 Idle, 1 Hips, 2 Wave, 3 Clap, 4 FistPump, 5 Shout, 6 Pump, 7 Jump.
+
+        private bool _styleArmed;
+        private float _stylePhase, _styleLastP, _styleReadyAt;
+
+        public string StartStyleShot(Vector3 riderPos, int style, float phase, string dir)
+        {
+            if (style < 0 || style >= (int)Style.Clip) return "no such style (0 Idle, 1 Hips, 2 Wave, 3 Clap, 4 FistPump, 5 Shout, 6 Pump, 7 Jump)";
+            Cheerer c = _shotOf != null && _shotOf.Root != null && _shotLeft <= 0 ? _shotOf : PickForShot(riderPos);
+            if (c == null) return "no spectator near the rider (" + _cheerers.Count + " placed)";
+            ClearAxes();
+            c.Cur = (Style)style; c.Excited = true; c.Clock = 0f; c.Speed = 1.25f; c.Amp = 1f; c.Variant = 0.5f;
+            _shotOf = c; _shotLeft = 0; _handShotIn = 0; _shotDir = dir;
+            _styleArmed = true; _stylePhase = Mathf.Clamp01(phase); _styleLastP = c.P; _styleReadyAt = _now + 1.5f;
+            return "spectator #" + c.Id + " does " + c.Cur + " (excited); a picture at " + _stylePhase.ToString("F2") + " of its cycle";
+        }
+        private readonly List<GameObject> _axes = new List<GameObject>();
+
+        public string StartHandShot(Vector3 riderPos, float clipSeconds, string dir)
+        {
+            if (_clips.Length == 0) return "no motion-capture clips";
+            Cheerer c = _shotOf != null && _shotOf.Root != null && _shotLeft <= 0 ? _shotOf : PickForShot(riderPos);
+            if (c == null) return "no spectator near the rider that can play a clip (" + _cheerers.Count + " placed)";
+            if (c.Clip == null) c.Clip = _clips[0];
+            c.Cur = Style.Clip; c.ClipT = Mathf.Max(0f, clipSeconds); c.ClipRate = 0f; c.ClipW = 1f; c.CurlL = c.CurlR = ClipHandCurl;
+            _styleArmed = false;
+            _shotOf = c; _shotLeft = 0; _shotDir = dir; _handShotIn = 4;   // a few frames: the pose and the skin settle
+            if (_axes.Count == 0) { DrawAxes(c, c.WristL, c.HandL); DrawAxes(c, c.WristR, c.HandR); }
+            return "spectator #" + c.Id + " held at " + c.ClipT.ToString("F2") + " s of " + c.Clip.Name + ", hands roll " + ClipHandRoll.ToString("F0") + " flex " + ClipHandFlex.ToString("F0")
+                + " side " + ClipHandSide.ToString("F0") + " curl " + ClipHandCurl.ToString("F2");
+        }
+
+        private void DrawAxes(Cheerer c, Transform wrist, Vector3[] hand)
+        {
+            if (wrist == null || hand == null) return;
+            Shader sh = Shader.Find("Hidden/Internal-Colored");
+            if (sh == null) sh = Shader.Find("Sprites/Default");
+            if (sh == null) { Log.Warn("Spectators: no shader to draw the hand axes with"); return; }
+            Color[] colours = { Color.red, Color.green, Color.blue };
+            float scale = Mathf.Max(1e-4f, wrist.lossyScale.x);
+            for (int i = 0; i < 3; i++)
+            {
+                var go = new GameObject("SpectatorHandAxis");
+                go.layer = wrist.gameObject.layer;
+                go.transform.SetParent(wrist, false);
+                LineRenderer line = go.AddComponent<LineRenderer>();
+                line.useWorldSpace = false;
+                line.material = new Material(sh);
+                line.material.color = colours[i];
+                line.startColor = line.endColor = colours[i];
+                line.startWidth = 0.014f; line.endWidth = 0.004f;   // thin at the far end: the way the axis points
+                line.positionCount = 2;
+                line.SetPosition(0, Vector3.zero);
+                line.SetPosition(1, hand[i] * (0.2f / scale));
+                _axes.Add(go);
+            }
+        }
+
+        private void ClearAxes()
+        {
+            foreach (GameObject g in _axes) if (g != null) UnityEngine.Object.Destroy(g);
+            _axes.Clear();
+        }
+
+        /// <summary>After the spectators were animated: take the next picture when its moment has come.</summary>
+        private void TickShots()
+        {
+            Cheerer c = _shotOf;
+            if (c == null) return;
+            if (c.Root == null || c.Clip == null) { _shotOf = null; ClearAxes(); return; }
+            if (_handShotIn > 0)
+            {
+                if (--_handShotIn > 0) return;
+                Vector3 mid = c.Chest.position + Vector3.up * 0.12f;
+                string name = "crowd_hands_t" + c.ClipT.ToString("F1") + "_roll" + ClipHandRoll.ToString("F0") + "_flex" + ClipHandFlex.ToString("F0") + "_side" + ClipHandSide.ToString("F0")
+                    + "_curl" + (ClipHandCurl * 100f).ToString("F0") + ".png";
+                Picture(name, 460, 460, 46f, new[] { mid + c.Fwd * 1.7f + Vector3.up * 0.25f, mid - c.ClipLeft * 1.7f + Vector3.up * 0.25f, mid + c.ClipLeft * 1.7f + Vector3.up * 0.25f }, mid);
+                return;
+            }
+            if (_styleArmed)
+            {
+                float last = _styleLastP, p = c.P;
+                _styleLastP = p;
+                if (_now < _styleReadyAt) return;
+                bool passed = p >= last ? last <= _stylePhase && _stylePhase < p : _stylePhase >= last || _stylePhase < p;   // the cycle wraps from 1 to 0
+                if (!passed) return;
+                _styleArmed = false;
+                Vector3 mid = c.Chest.position + c.Fwd * 0.25f + Vector3.up * 0.05f;
+                Picture("crowd_style_" + c.Cur + "_p" + (_stylePhase * 100f).ToString("F0") + ".png", 460, 460, 46f,
+                    new[] { mid + c.Fwd * 1.6f + Vector3.up * 0.25f, mid - c.ClipLeft * 1.6f + Vector3.up * 0.25f, mid + Vector3.up * 1.5f + c.Fwd * 0.2f }, mid);
+                return;
+            }
+            if (_shotLeft <= 0) return;   // held for more pictures
+            int n = _shotCount - _shotLeft;
+            float at = c.Clip.Seconds * n / _shotCount;
+            if (c.ClipT < at + 0.05f) return;   // a camera drawn by hand in Update shows the skin of the frame before: never the frame the clip started in
+            _shotLeft--;
+            Vector3 centre = new Vector3(c.BasePos.x, (c.AnkleL0.y + c.Head.position.y) * 0.5f + 0.1f, c.BasePos.z);
+            // near and from a little above: less tall grass in front of the lens
+            if (!Picture("crowd_shot_" + (n + 1).ToString("00") + ".png", ShotW, ShotH, 44f, new[] { centre + c.Fwd * 3.2f + Vector3.up * 0.9f, centre - c.ClipLeft * 3.2f + Vector3.up * 0.9f }, centre))
+                _shotLeft = 0;
+            else Log.Info("Spectators: picture " + (n + 1) + " of " + _shotCount + " at " + c.ClipT.ToString("F2") + " s of " + c.Clip.Name);
+            if (_shotLeft <= 0) { c.NextChange = 0f; _shotOf = null; }
+        }
+
+        /// <summary>One picture file of several views side by side, each w x h, from the given places looking at one point, by a camera of its own.</summary>
+        private bool Picture(string file, int w, int h, float fov, Vector3[] from, Vector3 lookAt)
+        {
+            RenderTexture rt = null; Texture2D tex = null; GameObject go = null;
+            RenderTexture was = RenderTexture.active;
+            try
+            {
+                go = new GameObject("SpectatorShotCamera");
+                Camera cam = go.AddComponent<Camera>();
+                if (Camera.main != null) cam.CopyFrom(Camera.main);
+                cam.enabled = false; cam.fieldOfView = fov; cam.nearClipPlane = 0.2f; cam.rect = new Rect(0f, 0f, 1f, 1f);
+                rt = RenderTexture.GetTemporary(w, h, 24);
+                cam.targetTexture = rt;
+                tex = new Texture2D(w * from.Length, h, TextureFormat.RGB24, false);
+                for (int view = 0; view < from.Length; view++)
+                {
+                    go.transform.position = from[view];
+                    go.transform.rotation = Quaternion.LookRotation(lookAt - from[view], Vector3.up);
+                    cam.Render();
+                    RenderTexture.active = rt;
+                    tex.ReadPixels(new Rect(0f, 0f, w, h), view * w, 0, false);
+                }
+                string path = System.IO.Path.Combine(_shotDir, file);
+                System.IO.Directory.CreateDirectory(_shotDir);
+                System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
+                Log.Info("Spectators: picture saved: " + path);
+                return true;
+            }
+            catch (Exception ex) { Log.Warn("Spectators: picture not taken (" + ex.GetType().Name + ": " + ex.Message + ")"); return false; }
+            finally
+            {
+                RenderTexture.active = was;
+                if (rt != null) RenderTexture.ReleaseTemporary(rt);
+                if (tex != null) UnityEngine.Object.Destroy(tex);
+                if (go != null) UnityEngine.Object.Destroy(go);
+            }
+        }
+
+        private static void LoadClips()
+        {
+            if (_clipsLoaded) return;
+            _clipsLoaded = true;
+            var found = new List<MocapClip>();
+            string names = "";
+            try
+            {
+                Assembly asm = typeof(Spectators).Assembly;
+                foreach (string res in asm.GetManifestResourceNames())
+                {
+                    if (!res.EndsWith(".dmc", StringComparison.OrdinalIgnoreCase)) continue;
+                    using (System.IO.Stream st = asm.GetManifestResourceStream(res))
+                    {
+                        MocapClip clip = st != null ? MocapClip.Read(st) : null;
+                        if (clip == null) { Log.Warn("Spectators: motion clip " + res + " could not be read"); continue; }
+                        found.Add(clip);
+                        names += (names.Length > 0 ? ", " : "") + clip.Name + " " + clip.Seconds.ToString("F1") + " s";
+                    }
+                }
+            }
+            catch (Exception ex) { Log.Error("Spectators: motion clips not loaded", ex); }
+            _clips = found.ToArray();
+            Log.Info("Spectators: " + _clips.Length + " motion-capture clip(s)" + (names.Length > 0 ? ": " + names : "") + ", played by the spectators with an animal's head"
+                + (Config.SpectatorAnimalClips ? "" : " (off: Config.SpectatorAnimalClips)"));
+        }
+
+        /// <summary>Once, in the rest pose: which bone plays which clip bone, and that bone's world rotation in the capture's rest pose.</summary>
+        private static void SetUpClips(Cheerer c)
+        {
+            if (_clips.Length == 0 || !c.Legs || c.Pelvis == null || c.Head == null || c.WristL == null || c.WristR == null) return;
+            Vector3 left = c.Left - c.Fwd * Vector3.Dot(c.Left, c.Fwd);
+            if (left.sqrMagnitude < 1e-6f) return;
+            c.ClipLeft = left.normalized;
+            c.ClipSign = Vector3.Dot(Vector3.Cross(c.ClipLeft, Vector3.up), c.Fwd) < 0f ? -1f : 1f;   // the game's axes are left-handed, the clip's right-handed
+            c.LegLen = (c.KneeL.position - c.HipL.position).magnitude + (c.AnkleL.position - c.KneeL.position).magnitude;
+            var bone = new Transform[MocapBone.Count];
+            var child = new Transform[MocapBone.Count];   // the joint a limb bone points at: its direction is matched to the capture's
+            bone[MocapBone.Pelvis] = c.Pelvis; bone[MocapBone.LowerBack] = c.Spine3; bone[MocapBone.UpperBack] = c.Spine5; bone[MocapBone.Thorax] = c.Chest;
+            bone[MocapBone.LowerNeck] = c.Neck1; bone[MocapBone.UpperNeck] = c.Neck2; bone[MocapBone.Head] = c.Head;
+            bone[MocapBone.LUpperArm] = c.ShoulderL; child[MocapBone.LUpperArm] = c.ElbowL; bone[MocapBone.LForearm] = c.ElbowL; child[MocapBone.LForearm] = c.WristL;
+            bone[MocapBone.RUpperArm] = c.ShoulderR; child[MocapBone.RUpperArm] = c.ElbowR; bone[MocapBone.RForearm] = c.ElbowR; child[MocapBone.RForearm] = c.WristR;
+            bone[MocapBone.LHand] = c.WristL; bone[MocapBone.RHand] = c.WristR;
+            bone[MocapBone.LThigh] = c.HipL; child[MocapBone.LThigh] = c.KneeL; bone[MocapBone.LShin] = c.KneeL; child[MocapBone.LShin] = c.AnkleL;
+            bone[MocapBone.RThigh] = c.HipR; child[MocapBone.RThigh] = c.KneeR; bone[MocapBone.RShin] = c.KneeR; child[MocapBone.RShin] = c.AnkleR;
+            bone[MocapBone.LFoot] = c.AnkleL; bone[MocapBone.RFoot] = c.AnkleR;
+            float[] rest = _clips[0].RestDir;   // every clip comes from the same kind of skeleton: one rest pose
+            var q = new Quaternion[MocapBone.Count];
+            for (int b = 0; b < MocapBone.Count; b++)
+            {
+                if (bone[b] == null) continue;
+                q[b] = bone[b].rotation;
+                Vector3 want = c.ClipLeft * rest[b * 3] + Vector3.up * rest[b * 3 + 1] + c.Fwd * rest[b * 3 + 2];
+                if (child[b] != null)
+                {
+                    Vector3 have = child[b].position - bone[b].position;
+                    if (have.sqrMagnitude > 1e-8f) q[b] = Quaternion.FromToRotation(have, want) * q[b];
+                }
+                else if (b == MocapBone.LHand || b == MocapBone.RHand)   // the hand: fingers along the capture's, palm down as in its rest pose
+                {
+                    bool l = b == MocapBone.LHand;
+                    Transform index = l ? c.IndexL : c.IndexR, pink = l ? c.PinkL : c.PinkR;
+                    Vector3 palm = bone[b].rotation * (l ? c.PalmL : c.PalmR);
+                    if (index == null || pink == null || palm.sqrMagnitude < 1e-6f) continue;
+                    // where the hand points: from the wrist to the last joint of the middle finger (the hand is flat in the rest pose)
+                    Vector3 have = (index.position + pink.position) * 0.5f - bone[b].position;
+                    foreach (Transform[] finger in l ? c.FingersL : c.FingersR)
+                        if (finger[0].name.IndexOf("Middle", StringComparison.Ordinal) >= 0) have = finger[finger.Length - 1].position - bone[b].position;
+                    if (have.sqrMagnitude < 1e-8f) continue;
+                    if (!_handLogged)
+                    {
+                        _handLogged = true;
+                        Log.Info("Spectators: hand in the rest pose: wrist to the last joint of the middle finger " + (have.magnitude * 100f).ToString("F1") + " cm, " + Vector3.Angle(have, palm).ToString("F0")
+                            + " degrees from the palm's normal, " + (l ? c.FingersL : c.FingersR).Length + " fingers");
+                    }
+                    q[b] = Quaternion.LookRotation(want, -Vector3.up) * Quaternion.Inverse(Quaternion.LookRotation(have, palm)) * q[b];
+                    // the hand's own axes, for the hand numbers (ClipHandRoll ...) and the developer's picture of them
+                    Vector3 f = have.normalized, p = (palm - f * Vector3.Dot(palm, f)).normalized, t = index.position - pink.position;
+                    t = t - f * Vector3.Dot(t, f) - p * Vector3.Dot(t, p);
+                    if (t.sqrMagnitude > 1e-10f)
+                    {
+                        Quaternion inv = Quaternion.Inverse(bone[b].rotation);
+                        Vector3[] hand = { inv * f, inv * p, inv * t.normalized };
+                        if (l) c.HandL = hand; else c.HandR = hand;
+                    }
+                }
+            }
+            c.ClipBone = bone; c.ClipRest = q;
+        }
+
+        /// <summary>Turn a hand at the wrist so its fingers point along want (k = how far, 0..1).</summary>
+        private static void AimHand(Transform wrist, Vector3[] hand, Vector3 want, float k)
+        {
+            if (wrist == null || hand == null) return;
+            Quaternion turn = Quaternion.FromToRotation(wrist.rotation * hand[0], want);
+            wrist.rotation = (k >= 1f ? turn : Quaternion.Slerp(Quaternion.identity, turn, k)) * wrist.rotation;
+        }
+
+        /// <summary>The hand numbers on top of the clip: roll about the fingers, then sideways, then the bend at the wrist, each in the hand's own terms.</summary>
+        private static void TurnHand(Transform wrist, Vector3[] hand, float w)
+        {
+            if (hand == null || (ClipHandRoll == 0f && ClipHandFlex == 0f && ClipHandSide == 0f)) return;
+            Vector3 f = hand[0], p = hand[1], t = hand[2];
+            Quaternion turn = Quaternion.AngleAxis(ClipHandFlex, Vector3.Cross(f, p)) * Quaternion.AngleAxis(ClipHandSide, Vector3.Cross(f, t)) * Quaternion.AngleAxis(ClipHandRoll, Vector3.Cross(p, t));
+            wrist.rotation = wrist.rotation * (w >= 1f ? turn : Quaternion.Slerp(Quaternion.identity, turn, w));
+        }
+
+        private static void PlayClip(Cheerer c, float dt)
+        {
+            c.ClipT += dt * c.ClipRate;
+            float w = Smooth(c.ClipW), x, y, z, qw;
+            Vector3 left = c.FrameRot * c.ClipLeft;
+            for (int b = 0; b < MocapBone.Count; b++)
+            {
+                Transform t = c.ClipBone[b];
+                if (t == null) continue;
+                c.Clip.Rotation(c.ClipT, b, out x, out y, out z, out qw);
+                Vector3 v = (left * x + Vector3.up * y + c.Fwd * z) * c.ClipSign;   // c.Fwd, left and ClipRest follow the dodge's turn (FrameRot)
+                Quaternion target = new Quaternion(v.x, v.y, v.z, qw) * (c.FrameRot * c.ClipRest[b]);
+                t.rotation = w >= 1f ? target : Quaternion.Slerp(t.rotation, target, w);
+            }
+            TurnHand(c.WristL, c.HandL, w);
+            TurnHand(c.WristR, c.HandR, w);
+            // stand on the ground: the lower ankle as far above where it rests as the clip says, and the little the actor moved about
+            float side, forward, lift;
+            c.Clip.RootAt(c.ClipT, out side, out forward, out lift);
+            float low = Mathf.Min(c.AnkleL.position.y - c.AnkleL0.y, c.AnkleR.position.y - c.AnkleR0.y);
+            c.Root.position += (Vector3.up * (lift * c.LegLen - low) + (left * side + c.Fwd * forward) * c.LegLen) * w;
         }
 
         private static readonly float[] CurlDeg = { 60f, 90f, 65f };   // knuckle, middle, end joint at a full fist
 
         /// <summary>
         /// Close the hand: every joint of a finger turns about one axis, found at the knuckle (the finger's direction turning towards the palm), so the
-        /// finger rolls into the palm. The thumb (a 3-joint chain) closes half as far.
+        /// finger rolls into the palm. The thumb closes half as far, and across the palm (towards the little finger's side, a little under), as a
+        /// thumb does: turned towards the palm like the fingers it stuck straight out of a fist.
         /// </summary>
         private static void CurlFingers(Transform[][] fingers, Transform wrist, Vector3 palmLocal, float k)
         {
             if (fingers == null || k < 0.02f) return;
             Vector3 palm = wrist.rotation * palmLocal;
+            Transform indexKnuckle = null, pinkKnuckle = null;
+            foreach (Transform[] f in fingers)
+            {
+                if (f.Length < 1) continue;
+                if (f[0].name.IndexOf("Index", StringComparison.Ordinal) >= 0) indexKnuckle = f[0];
+                else if (f[0].name.IndexOf("Pink", StringComparison.Ordinal) >= 0) pinkKnuckle = f[0];
+            }
+            Vector3 across = indexKnuckle != null && pinkKnuckle != null ? N(pinkKnuckle.position - indexKnuckle.position) : Vector3.zero;   // before any finger moves
             foreach (Transform[] f in fingers)
             {
                 if (f.Length < 2) continue;
+                bool isThumb = f[0].name.IndexOf("Thumb", StringComparison.Ordinal) >= 0;
+                Vector3 goal = isThumb && across != Vector3.zero ? across + palm * 0.35f : palm;
                 Vector3 d = f[1].position - f[0].position;
-                Vector3 toward = palm - d.normalized * Vector3.Dot(palm, d.normalized);
+                Vector3 toward = goal - d.normalized * Vector3.Dot(goal, d.normalized);
                 if (d.sqrMagnitude < 1e-8f || toward.sqrMagnitude < 1e-6f) continue;
                 Vector3 axis = Vector3.Cross(d, toward);
-                // the sense of the axis: rotating d about it by a positive angle must move it towards the palm
+                // the sense of the axis: rotating d about it by a positive angle must move it towards the goal
                 if (Vector3.Dot(Quaternion.AngleAxis(10f, axis) * d - d, toward) < 0f) axis = -axis;
-                float scale = f.Length < 4 ? 0.5f : 1f;   // the thumb
-                for (int j = 0; j + 1 < f.Length && j < CurlDeg.Length; j++)
+                float scale = isThumb ? 0.5f : 1f;
+                for (int j = 0; j < f.Length && j < CurlDeg.Length; j++)
                     f[j].rotation = Quaternion.AngleAxis(CurlDeg[j] * k * scale, axis) * f[j].rotation;
             }
         }
@@ -370,6 +1018,12 @@ namespace DescendersCyclingPOC
                     }
                     else if (p < 0.8f) pelvisY = Mathf.Lerp(0f, -0.10f, EaseOut((p - 0.65f) / 0.15f));              // land and absorb
                     else pelvisY = Mathf.Lerp(-0.10f, SoftKnee, Smooth((p - 0.8f) / 0.2f));
+                    break;
+                }
+                case Style.Run:   // the pelvis drops at each foot strike (twice a cycle) and rises between, lower when running than walking
+                {
+                    float k = Mathf.Clamp01(c.DodgeSpeed / SpectatorRules.DodgeRunMs);
+                    pelvisY = SoftKnee - 0.03f - 0.05f * k + (0.02f + 0.035f * k) * (0.5f + 0.5f * Mathf.Cos(c.GaitP * 4f * Mathf.PI));
                     break;
                 }
                 case Style.Pump: pelvisY = SoftKnee - 0.035f * amp * (0.5f - 0.5f * Mathf.Cos(p * 4f * Mathf.PI)); break;   // bounce twice per arm cycle
@@ -402,7 +1056,7 @@ namespace DescendersCyclingPOC
                     float gap = ClapGap(p);
                     float height = c.Excited ? -0.05f + c.Variant * 0.3f : -0.12f + c.Variant * 0.1f;
                     Vector3 centre = c.Chest.position + fw * 0.33f + up * height;
-                    Vector3 wrist = centre + o * (0.02f + gap * 0.16f * amp) - fw * 0.07f;
+                    Vector3 wrist = centre + o * (0.025f + gap * 0.16f * amp) - fw * 0.07f;   // 2.5 cm each side of the middle: the palms just meet (the hands are kept square to each other, AimHand)
                     if (IkDirs(c, side, wrist, o * 0.8f - up * 0.8f, out u, out f)) { thumb = up; curl = 0.1f; return; }
                     break;
                 }
@@ -420,8 +1074,17 @@ namespace DescendersCyclingPOC
                 case Style.Pump:   // both arms in a wide V, forearms waving out of step
                     u = N(o + up * 0.8f + fw * 0.1f);
                     f = N(up + o * (0.25f + 0.3f * Mathf.Sin(p * tau + side * 1.2f) * amp));
-                    thumb = -o; curl = 0.6f;
+                    thumb = -o; curl = 1f;   // fists: half closed (0.6) the hands looked clamped round a pipe that is not there (rider, 2026-10-11)
                     return;
+                case Style.Run:   // elbows bent, each arm swinging against its own side's leg
+                {
+                    float k = Mathf.Clamp01(c.DodgeSpeed / SpectatorRules.DodgeRunMs);
+                    float swing = -side * Mathf.Sin(c.GaitP * tau) * (0.35f + 0.55f * k);
+                    u = N(-up * 0.9f + fw * swing + o * 0.12f);
+                    f = N(fw * (0.55f + 0.35f * k) - up * (0.6f - 0.35f * k) + fw * (swing * 0.3f) - o * 0.05f);
+                    thumb = up; curl = 0.6f;
+                    return;
+                }
                 case Style.Jump:   // arms swing down and back in the dip and up in the flight
                 {
                     float k = c.Crouch;
@@ -435,7 +1098,7 @@ namespace DescendersCyclingPOC
             float sway = (Mathf.PerlinNoise(time * 0.4f, c.Id * 1.7f + side) - 0.5f) * 0.2f;
             u = N(-up + o * 0.12f + fw * (0.04f + sway * 0.5f));
             f = N(-up + fw * (0.3f + sway) - o * 0.04f);
-            thumb = fw; curl = 0.3f;
+            thumb = fw; curl = st == Style.Clip ? ClipHandCurl : 0.3f;   // a clip has no fingers
         }
 
         /// <summary>Where a hand rests on the hip: just above the hip joint and out to the side.</summary>
@@ -553,11 +1216,12 @@ namespace DescendersCyclingPOC
 
         private static Vector3 N(Vector3 v) { return v.sqrMagnitude > 1e-8f ? v.normalized : Vector3.up; }
 
-        private void Spawn(PlayerProbe probe, PathTrack track)
+        private bool Spawn(PlayerProbe probe, PathTrack track, bool auto)
         {
-            if (!track.Loaded) { Log.Warn("Spectators: no generated course path in this scene"); return; }
+            if (!track.Loaded) { Log.Warn("Spectators: no generated course path in this scene"); return false; }
             if (!_itemsListed) { _itemsListed = true; ListHeadItems(); }
-            if (probe.Player == null) { Log.Warn("Spectators: no rider to copy (are you on the course?)"); return; }
+            LoadClips();
+            if (probe.Player == null) { Log.Warn("Spectators: no rider to copy (are you on the course?)"); return false; }
 
             // 1. one stripped template, made under an inactive parent so none of the rider's scripts ever start
             var holder = new GameObject("CyclingPOC_CloneHolder");
@@ -587,54 +1251,182 @@ namespace DescendersCyclingPOC
             }
             Log.Info("Spectators: hair styles in the game: " + styleNames + "; " + femaleHairs.Count + " used for female heads");
             GameObject[] hats = Config.SpectatorHats ? BuildHatTemplates(holder.transform) : new GameObject[0];
-            int want = Config.SpectatorCount, placed = 0;
+            int want = Config.SpectatorCount;
             float margin = Mathf.Min(40f, track.Length * 0.1f);
-            var rng = new System.Random(7);
+            // the whole path, for "is this spot on the track": a hairpin brings another part of the course to where "beside the path" was
+            var pathX = new float[track.Points.Length]; var pathZ = new float[track.Points.Length];
+            for (int i = 0; i < pathX.Length; i++) { pathX[i] = track.Points[i].x; pathZ[i] = track.Points[i].z; }
+            // seeded by the course: the same course keeps its crowd, another course gets another (with fixed seeds every course had the same one)
+            var rng = new System.Random(SpectatorRules.CourseSeed(pathX, pathZ, 7));
             if (Config.SpectatorClothes) { LoadClothingCatalogue(); FindAlphaMaps(probe.Player); }
             FindBodyTypes();
-            var bodyRng = new System.Random(11);   // its own stream, so the body types do not reshuffle the outfits
-            bool loggedBody = false;
-            List<Spot> spots = BuildSpots(track.Length, margin, want, rng);
-            for (int i = 0; i < spots.Count; i++)
+            var bodyRng = new System.Random(SpectatorRules.CourseSeed(pathX, pathZ, 11));   // its own stream, so the body types do not reshuffle the outfits
+            if (Config.SpectatorSkinTones) FindSkinTones(probe.Player); else _skinTones = null;
+            var toneRng = new System.Random(SpectatorRules.CourseSeed(pathX, pathZ, 13));   // and the skin tones theirs
+            Log.Info("Spectators: crowd seed " + SpectatorRules.CourseSeed(pathX, pathZ, 7) + " (from this course's path)");
+            int ringN = SpectatorRules.RingCount(want);
+            List<Spot> spots = BuildSpots(track.Length, margin, want - ringN, rng);
+            // round the finish area past the arch: measured from a point inside it, where the barrier is in each direction
+            Vector3 endT = track.EndTangent, endR = Vector3.Cross(Vector3.up, endT);
+            Vector3 ringC = track.Points[track.Points.Length - 1] + endT * SpectatorRules.RingCentreM;
+            int ringRows = SpectatorRules.RingRows(ringN, SpectatorRules.RingDefaultM);
+            // nearest the start first: the crowd is placed a few per frame (SpectatorRules.BuildMsPerFrame), and the rider starts at the top
+            spots.Sort(delegate(Spot x, Spot y) { return x.S.CompareTo(y.S); });
+            for (int i = 0; i < ringN; i++)
+                spots.Add(new Spot { Ring = true, Ang = SpectatorRules.RingAngleDeg(i, ringN, (float)rng.NextDouble() - 0.5f), Row = i % ringRows });
+            _pathX = pathX; _pathZ = pathZ; _dodges = 0;
+            _job = new Job
             {
-                float s = spots[i].S;                Vector3 p = track.At(s);
-                Vector3 t = track.At(Mathf.Min(track.Length, s + 2f)) - track.At(Mathf.Max(0f, s - 2f));
-                t.y = 0f;
-                if (t.sqrMagnitude < 1e-4f) continue;
-                t.Normalize();
-                Vector3 right = Vector3.Cross(Vector3.up, t);
-                float side = spots[i].Side;
-                float off = spots[i].Off;
-                Vector3 pos = p + right * side * off;
-                float gy;
-                if (!GroundAt(pos, probe.Player.transform, out gy)) { Log.Info("Spectators: no ground at " + s.ToString("F0") + " m, skipped"); continue; }
-                Vector3 face = -right * side;   // look at the course
-                GameObject g = (GameObject)UnityEngine.Object.Instantiate(template, new Vector3(pos.x, gy + 2f, pos.z), Quaternion.LookRotation(face, Vector3.up), _root.transform);
-                g.name = "Spectator_" + (placed + 1);
-                if (Config.SpectatorClothes) SwapClothes(g, rng, holder.transform, placed == 0);
-                int body = -1;
-                if (_bodyTypes != null && bodyRng.NextDouble() < Config.SpectatorFemaleShare) { body = _otherBodies[bodyRng.Next(_otherBodies.Count)]; ApplyBodyType(g, _bodyTypes[body], ref loggedBody); }   // before the pose: the bind pose comes from the mesh
-                if (body >= 0) g.transform.localScale = Vector3.one * FemaleScale;   // before the pose, so the feet are placed on the ground at the new size
-                string msg = PoseAndPlace(g, new Vector3(pos.x, gy, pos.z), face, (float)rng.NextDouble() * 6.28f);
-                if (_cheerers.Count > 0 && object.ReferenceEquals(_cheerers[_cheerers.Count - 1].Root, g.transform)) { _cheerers[_cheerers.Count - 1].Body = body; if (body >= 0) NarrowHead(_cheerers[_cheerers.Count - 1]); }
-                if (placed == 0) Log.Info("Spectators: pose: " + msg);
-                Transform hairParent = hairParentRel != null ? g.transform.Find(hairParentRel) : null;
-                if (hairParent == null) hairParent = _lastHead;
-                // equipped items hang directly under the link's spawn point (attribute_head); hair goes one level up, under the head bone (PlayerCustomization equip routine, IL)
-                Transform hatParent = hairParent != null ? hairParent.Find("attribute_head") : null;
-                if (hatParent == null) hatParent = hairParent;
-                if (hats.Length > 0 && hatParent != null) AttachTemplate(hatParent, hats[rng.Next(hats.Length)], holder.transform, "hat", Config.SpectatorHatDropM);
-                if (body >= 0 && femaleHairs.Count > 0 && hairParent != null) AttachHair(hairParent, femaleHairs[bodyRng.Next(femaleHairs.Count)], HairColours[bodyRng.Next(4)], holder.transform);   // natural colours only
-                else if (Config.SpectatorHair && hairs.Length > 0 && hairParent != null) AttachHair(hairParent, hairs[rng.Next(hairs.Length)], HairColours[rng.Next(HairColours.Length)], holder.transform);
-                placed++;
+                holder = holder, template = template, hairParentRel = hairParentRel, hairs = hairs, hats = hats, femaleHairs = femaleHairs, want = want,
+                rng = rng, bodyRng = bodyRng, toneRng = toneRng, toneDeck = _skinTones != null ? new int[_skinTones.Length] : null, spots = spots, ringN = ringN, ringRows = ringRows, endT = endT, endR = endR, ringC = ringC,
+                pathX = pathX, pathZ = pathZ, refused = new int[5], track = track, auto = auto,
+            };
+            return true;
+        }
+
+        /// <summary>
+        /// A crowd being placed. Making 500 people in one frame froze the game for over half a second, right as the rider left the start
+        /// gate; they are made a few per frame instead, nearest the start first.
+        /// </summary>
+        private sealed class Job
+        {
+            public GameObject holder, template;
+            public string hairParentRel;
+            public GameObject[] hairs, hats;
+            public List<GameObject> femaleHairs;
+            public int want, placed, ringN, ringRows, ringPlaced, ringBarrier, moved, skipped, next, animals, clipPlayers, toneNext;
+            public System.Random rng, bodyRng, toneRng;
+            public int[] toneDeck;          // SpectatorRules.NextTone; null = no skin palette, the copies keep the rider's tint
+            public bool loggedBody, auto;   // auto: owed to a new course (TickOwed), not asked for with the key
+            public List<Spot> spots;
+            public Vector3 endT, endR, ringC;
+            public float[] pathX, pathZ;
+            public int[] refused;           // by SpectatorRules.Spot: why a spectator's first spot was not used
+            public PathTrack track;
+        }
+
+        private Job _job;
+        private readonly System.Diagnostics.Stopwatch _buildWatch = new System.Diagnostics.Stopwatch();
+        public bool Building { get { return _job != null; } }
+
+        /// <summary>Per-frame: place the next few of the crowd, for at most SpectatorRules.BuildMsPerFrame.</summary>
+        public void TickBuild(PlayerProbe probe, float now)
+        {
+            Job j = _job;
+            if (j == null || probe.Player == null) return;   // no rider for a moment: wait (a new course clears the job)
+            try
+            {
+                _buildWatch.Reset(); _buildWatch.Start();
+                int done = 0;
+                while (j.next < j.spots.Count && SpectatorRules.KeepBuilding(_buildWatch.Elapsed.TotalMilliseconds, done))
+                {
+                    PlaceOne(j, j.next, probe.Player.transform);
+                    j.next++; done++;
+                }
+                Count = j.placed;
+                if (j.next >= j.spots.Count) FinishSpawn(j, now);
             }
-            Count = placed;
+            catch (Exception ex) { Log.Error("Spectators: spawn failed", ex); Clear("error"); _owed = false; }
+        }
+
+        /// <summary>One spectator of the crowd being placed: find the spot, copy the template, dress and pose it.</summary>
+        private void PlaceOne(Job j, int i, Transform rider)
+        {
+            bool ring = j.spots[i].Ring;
+            float s = j.spots[i].S;
+            Vector3 p = ring ? j.ringC : j.track.At(s);
+            Vector3 t = j.track.At(Mathf.Min(j.track.Length, s + 2f)) - j.track.At(Mathf.Max(0f, s - 2f));
+            t.y = 0f;
+            if (!ring && t.sqrMagnitude < 1e-4f) return;
+            t.Normalize();
+            Vector3 right = Vector3.Cross(Vector3.up, t);
+            float barrierM = 0f; bool barrier = false;
+            if (ring)   // "right" is the way out from the middle of the finish area, side 1
+            {
+                float a = j.spots[i].Ang * Mathf.Deg2Rad;
+                right = j.endT * Mathf.Cos(a) + j.endR * Mathf.Sin(a);
+                barrier = BarrierAt(j.ringC, right, rider, out barrierM);
+                if (barrier) j.ringBarrier++;
+            }
+            float side = 0f, gy = 0f;
+            Vector3 pos = p;
+            bool found = false;
+            for (int attempt = 0; attempt < SpectatorRules.Attempts && !found; attempt++)
+            {
+                float off;
+                if (ring) { side = 1f; off = SpectatorRules.RingOff(barrierM, barrier, j.spots[i].Row, attempt); }
+                else SpectatorRules.Candidate(attempt, j.spots[i].Side, j.spots[i].Off, out side, out off);
+                pos = p + right * side * off;
+                SpectatorRules.Spot res = SpectatorRules.NearTrack(j.pathX, j.pathZ, pos.x, pos.z) ? SpectatorRules.Spot.NearTrack
+                                        : GroundBeside(p, right * side, off, rider, out gy);
+                found = res == SpectatorRules.Spot.Ok;
+                if (attempt == 0 && !found) j.refused[(int)res]++;
+                if (attempt > 0 && found) j.moved++;
+            }
+            if (!found)
+            {
+                if (++j.skipped <= 10) Log.Info("Spectators: no place to stand " + (ring ? "round the finish area at " + j.spots[i].Ang.ToString("F0") + " degrees" : "beside the path at " + s.ToString("F0") + " m") + ", j.skipped");
+                return;
+            }
+            Vector3 face = -right * side;   // look at the course
+            GameObject g = (GameObject)UnityEngine.Object.Instantiate(j.template, new Vector3(pos.x, gy + 2f, pos.z), Quaternion.LookRotation(face, Vector3.up), _root.transform);
+            g.name = "Spectator_" + (j.placed + 1);
+            if (Config.SpectatorClothes) SwapClothes(g, j.rng, j.holder.transform, j.placed == 0);
+            int body = -1;
+            if (_bodyTypes != null && j.bodyRng.NextDouble() < Config.SpectatorFemaleShare) { body = _otherBodies[j.bodyRng.Next(_otherBodies.Count)]; ApplyBodyType(g, _bodyTypes[body], ref j.loggedBody); }   // before the pose: the bind pose comes from the mesh
+            if (body >= 0) g.transform.localScale = Vector3.one * FemaleScale;   // before the pose, so the feet are placed on the ground at the new size
+            string msg = PoseAndPlace(g, new Vector3(pos.x, gy, pos.z), face, (float)j.rng.NextDouble() * 6.28f);
+            if (_cheerers.Count > 0 && object.ReferenceEquals(_cheerers[_cheerers.Count - 1].Root, g.transform)) { _cheerers[_cheerers.Count - 1].Body = body; if (body >= 0) NarrowHead(_cheerers[_cheerers.Count - 1]); }
+            if (j.placed == 0) Log.Info("Spectators: pose: " + msg);
+            Transform hairParent = j.hairParentRel != null ? g.transform.Find(j.hairParentRel) : null;
+            if (hairParent == null) hairParent = _lastHead;
+            // equipped items hang directly under the link's spawn point (attribute_head); hair goes one level up, under the head bone (PlayerCustomization equip routine, IL)
+            Transform hatParent = hairParent != null ? hairParent.Find("attribute_head") : null;
+            if (hatParent == null) hatParent = hairParent;
+            if (j.hats.Length > 0 && hatParent != null)
+            {
+                GameObject hat = j.hats[j.rng.Next(j.hats.Length)];
+                AttachTemplate(hatParent, hat, j.holder.transform, "hat", Config.SpectatorHatDropM);
+                if (_cheerers.Count > 0 && object.ReferenceEquals(_cheerers[_cheerers.Count - 1].Root, g.transform) && hat.name.StartsWith(HatTemplatePrefix, StringComparison.Ordinal)
+                    && SpectatorRules.IsAnimalHead(hat.name.Substring(HatTemplatePrefix.Length)))
+                {
+                    j.animals++;
+                    if (SpectatorRules.PlaysClip(true, j.placed, j.clipPlayers, Config.SpectatorClipShare)) { _cheerers[_cheerers.Count - 1].Animal = true; j.clipPlayers++; }
+                }
+            }
+            if (j.toneDeck != null)
+            {
+                int tone = SpectatorRules.NextTone(j.toneDeck, ref j.toneNext, j.toneRng);
+                if (tone >= 0) TintSkin(g, _skinTones[tone]);
+                if (_cheerers.Count > 0 && object.ReferenceEquals(_cheerers[_cheerers.Count - 1].Root, g.transform)) _cheerers[_cheerers.Count - 1].Skin = tone;
+            }
+            if (body >= 0 && j.femaleHairs.Count > 0 && hairParent != null) AttachHair(hairParent, j.femaleHairs[j.bodyRng.Next(j.femaleHairs.Count)], HairColours[j.bodyRng.Next(4)], j.holder.transform);   // natural colours only
+            else if (Config.SpectatorHair && j.hairs.Length > 0 && hairParent != null) AttachHair(hairParent, j.hairs[j.rng.Next(j.hairs.Length)], HairColours[j.rng.Next(HairColours.Length)], j.holder.transform);
+            j.placed++;
+            if (ring) j.ringPlaced++;
+        }
+
+        /// <summary>Everyone is placed: the template goes, the log says how it went, and a crowd owed to a new course is settled.</summary>
+        private void FinishSpawn(Job j, float now)
+        {
+            Count = j.placed; _job = null;
+            Log.Info("Spectators: " + j.ringPlaced + " of " + j.ringN + " stand round the finish area (" + j.ringRows + " row(s), a barrier found for " + j.ringBarrier + ", else "
+                + SpectatorRules.RingDefaultM.ToString("F0") + " m out from " + SpectatorRules.RingCentreM.ToString("F0") + " m past the end of the path)");
             int noisy = 0;
             foreach (Cheerer c in _cheerers) if (c.Noise >= 0) noisy++;
             Log.Info("Spectators: " + noisy + " carry a noisemaker (" + string.Join(", ", Config.SpectatorNoiseEvents) + ")");
-            UnityEngine.Object.Destroy(holder);   // takes the template with it, and the garment templates
+            Log.Info("Spectators: " + j.animals + " wear an animal's head, " + j.clipPlayers + " of them play the motion-capture clips (" + _clips.Length + " clip(s), at most "
+                + (Config.SpectatorClipShare * 100f).ToString("F0") + " % of the crowd); the rest cheer");
+            if (j.toneDeck != null) Log.Info("Spectators: skin tones spread evenly over the game's " + j.toneDeck.Length + " (the rider's is " + _riderSkin + ")");
+            UnityEngine.Object.Destroy(j.holder);   // takes the template with it, and the garment templates
             _clothCache.Clear();                  // so the next spawn must not get them back from the cache (they were destroyed: spectators came out undressed)
-            Log.Info("Spectators: placed " + placed + " of " + want + " in " + Mathf.CeilToInt(want / (float)GroupSize) + " groups along " + track.Length.ToString("F0") + " m of path (offset " + Config.SpectatorOffsetM.ToString("F1") + " m+)");
+            Log.Info("Spectators: placed " + j.placed + " of " + j.want + " in " + Mathf.CeilToInt(j.want / (float)GroupSize) + " groups along " + j.track.Length.ToString("F0") + " m of path (offset " + Config.SpectatorOffsetM.ToString("F1") + " m+)");
+            Log.Info("Spectators: first spot refused for " + (j.moved + j.skipped) + " (" + j.refused[(int)SpectatorRules.Spot.NearTrack] + " on or near the track, "
+                + j.refused[(int)SpectatorRules.Spot.NoGround] + " no ground beside the path, " + j.refused[(int)SpectatorRules.Spot.Steep] + " too steep, "
+                + j.refused[(int)SpectatorRules.Spot.Blocked] + " under or inside something): " + j.moved + " moved further out or across, " + j.skipped + " skipped");
+            if (!j.auto) return;
+            if (CourseRules.CrowdAgain(Count, _owedTries)) { Clear("nobody placed on the new course, trying again"); _owedAt = now + CourseRules.CrowdWaitS; }
+            else { _owed = false; Log.Info("Spectators: back on the new course by themselves (" + Count + " placed, try " + _owedTries + ")"); }
         }
 
         /// <summary>Remove everything that is not a plain mesh: scripts (vehicle, ragdoll, network, sound), physics, particle systems, lights, animation drivers.</summary>
@@ -689,21 +1481,78 @@ namespace DescendersCyclingPOC
             catch (Exception) { return false; }
         }
 
-        /// <summary>Highest walkable surface below the point that is not the rider (terrain, ground meshes), ignoring triggers and steep faces (trunks, walls).</summary>
-        private static bool GroundAt(Vector3 pos, Transform rider, out float y)
+        private const float RayAboveM = 30f, RayBelowM = 30f;   // how far above and below the last known ground a column is searched
+        private float[] _hitY = new float[16], _hitNormalY = new float[16];
+
+        // The rider / bike colliders live on their own layers and are not always under Player_Human (as in TerrainSampler).
+        private static int GroundMask()
         {
-            y = 0f;
-            RaycastHit[] hits = Physics.RaycastAll(pos + Vector3.up * 40f, Vector3.down, 120f, ~0, QueryTriggerInteraction.Ignore);
-            float best = float.NegativeInfinity;
+            int mask = ~0;
+            foreach (string name in new[] { "Bike", "Cyclist" })
+            {
+                int l = LayerMask.NameToLayer(name);
+                if (l >= 0) mask &= ~(1 << l);
+            }
+            return mask;
+        }
+
+        /// <summary>Every surface in the column at pos, from RayAboveM above refY down (triggers and the rider left out): heights in _hitY, normals in _hitNormalY.</summary>
+        private int Column(Vector3 pos, float refY, Transform rider, int mask)
+        {
+            RaycastHit[] hits = Physics.RaycastAll(new Vector3(pos.x, refY + RayAboveM, pos.z), Vector3.down, RayAboveM + RayBelowM, mask, QueryTriggerInteraction.Ignore);
+            if (hits.Length > _hitY.Length) { _hitY = new float[hits.Length]; _hitNormalY = new float[hits.Length]; }
+            int n = 0;
             foreach (RaycastHit h in hits)
             {
-                if (h.collider.transform.root == rider.root) continue;
-                if (h.normal.y < 0.55f) continue;
-                if (h.point.y > best) best = h.point.y;
+                if (h.collider == null || h.collider.transform.root == rider.root) continue;
+                _hitY[n] = h.point.y; _hitNormalY[n] = h.normal.y; n++;
             }
-            if (float.IsNegativeInfinity(best)) return false;
-            y = best;
-            return true;
+            return n;
+        }
+
+        /// <summary>
+        /// How far from c the edge of the finish area is in direction dir: the first thing a level ray hits at knee or chest height (a barrier,
+        /// a fence, a steep bank). False = nothing within RingMaxM.
+        /// </summary>
+        private bool BarrierAt(Vector3 c, Vector3 dir, Transform rider, out float dist)
+        {
+            dist = float.MaxValue;
+            int mask = GroundMask();
+            int n = Column(c, c.y, rider, mask);
+            int at = SpectatorRules.PickAtPath(_hitY, n, c.y);
+            float y = at >= 0 ? _hitY[at] : c.y;
+            foreach (float h in new[] { 0.5f, 1.0f })
+                foreach (RaycastHit hit in Physics.RaycastAll(new Vector3(c.x, y + h, c.z), dir, SpectatorRules.RingMaxM, mask, QueryTriggerInteraction.Ignore))
+                    if (hit.collider != null && hit.collider.transform.root != rider.root && hit.normal.y < 0.7f && hit.distance < dist) dist = hit.distance;   // not the ground itself, gently rising
+            return dist < float.MaxValue;
+        }
+
+        /// <summary>
+        /// The ground off metres beside path point p: walk out from the path, whose height is known, and at each step take only a
+        /// surface the last one can lead to (SpectatorRules). The highest thing under the spot is not the ground on every course: it was a tree
+        /// top, a rock or a bridge, and the crowd floated. The spot itself must be flat enough and have nothing above it.
+        /// </summary>
+        private SpectatorRules.Spot GroundBeside(Vector3 p, Vector3 dir, float off, Transform rider, out float y)
+        {
+            y = 0f;
+            int mask = GroundMask();
+            int n = Column(p, p.y, rider, mask);
+            int at = SpectatorRules.PickAtPath(_hitY, n, p.y);
+            float lastY = at >= 0 ? _hitY[at] : p.y, lastD = 0f;
+            int steps = SpectatorRules.Steps(off);
+            for (int k = 1; k <= steps; k++)
+            {
+                float d = off * k / steps;
+                n = Column(p + dir * d, lastY, rider, mask);
+                int pick = SpectatorRules.PickStep(_hitY, n, lastY, d - lastD);
+                if (k < steps) { if (pick >= 0) { lastY = _hitY[pick]; lastD = d; } continue; }
+                if (pick < 0) return SpectatorRules.Spot.NoGround;
+                if (_hitNormalY[pick] < SpectatorRules.MinNormalY) return SpectatorRules.Spot.Steep;
+                if (SpectatorRules.Blocked(_hitY, n, _hitY[pick])) return SpectatorRules.Spot.Blocked;
+                y = _hitY[pick];
+                return SpectatorRules.Spot.Ok;
+            }
+            return SpectatorRules.Spot.NoGround;
         }
 
         /// <summary>
@@ -790,6 +1639,9 @@ namespace DescendersCyclingPOC
             for (int i = 0; i < ch.Anim.Length; i++) ch.RestLocal[i] = ch.Anim[i].localRotation;
             ch.ChestRest = chest.rotation;
             if (ch.Legs) { ch.AnkleL0 = ch.AnkleL.position; ch.AnkleR0 = ch.AnkleR.position; ch.AnkleRestL = ch.AnkleL.rotation; ch.AnkleRestR = ch.AnkleR.rotation; }
+            ch.Org = ch.BasePos; ch.FwdB = ch.Fwd; ch.LeftB = ch.Left; ch.AnkleL0B = ch.AnkleL0; ch.AnkleR0B = ch.AnkleR0;   // the rest frame, for the dodge
+            ch.ChestRestB = ch.ChestRest; ch.AnkleRestLB = ch.AnkleRestL; ch.AnkleRestRB = ch.AnkleRestR; ch.RootRot0 = g.transform.rotation;
+            SetUpClips(ch);
             ch.NextChange = 0f;   // the first Tick picks a style
             ch.Cur = Style.Idle; ch.Speed = 1f; ch.Amp = 1f; ch.PY = SoftKnee;
             ch.UL.X = N(-Vector3.up + ch.Left * 0.12f); ch.FL.X = N(-Vector3.up + ch.Fwd * 0.3f);
@@ -1005,6 +1857,8 @@ namespace DescendersCyclingPOC
         /// Head accessories from the game's own catalogue (CustomizationItem, slot 11 = Accessories_Head): hats, crowns, mohawks, animal heads.
         /// Only items that hide nothing (so no full-face masks) and are not props such as a knife or a camera. The item's assetPath is a Resources path.
         /// </summary>
+        private const string HatTemplatePrefix = "hat_template_";   // + the item's display name: how a placed spectator's hat is known (SpectatorRules.IsAnimalHead)
+
         private static GameObject[] BuildHatTemplates(Transform holder)
         {
             var result = new List<GameObject>();
@@ -1032,7 +1886,7 @@ namespace DescendersCyclingPOC
                     if (prefab == null) { failed++; if (failed <= 3) Log.Info("Spectators: hat '" + name + "' did not load from Resources path " + path + "_prefab"); continue; }
                     GameObject copy = (GameObject)UnityEngine.Object.Instantiate(prefab, holder);   // inactive parent: nothing on it starts
                     Strip(copy, new StringBuilder());
-                    copy.name = "hat_template_" + name;
+                    copy.name = HatTemplatePrefix + name;
                     result.Add(copy);
                     loaded.Append(name).Append(", ");
                 }
@@ -1053,10 +1907,10 @@ namespace DescendersCyclingPOC
         }
         private const int GroupSize = 4;
 
-        private struct Spot { public float S, Side, Off; }
+        private struct Spot { public float S, Side, Off; public bool Ring; public float Ang; public int Row; }   // Ring: round the finish area, Ang degrees from straight on
 
         /// <summary>
-        /// Small groups rather than an even spread: about 30 % of the groups gather near the finish end, 20 % near the start end, the rest anywhere.
+        /// Small groups rather than an even spread: about 30 % of the groups gather near the finish end, 8 % near the start end (SpectatorRules), the rest anywhere.
         /// Each member is a few metres from its group's centre, on either side of the path.
         /// </summary>
         private static List<Spot> BuildSpots(float length, float margin, int want, System.Random rng)
@@ -1068,8 +1922,8 @@ namespace DescendersCyclingPOC
             for (int g = 0; g < groups && list.Count < want; g++)
             {
                 double r = rng.NextDouble();
-                float centre = r < 0.30 ? hi - (float)rng.NextDouble() * Mathf.Min(80f, hi - lo)
-                             : r < 0.50 ? lo + (float)rng.NextDouble() * Mathf.Min(80f, hi - lo)
+                float centre = r < SpectatorRules.FinishShare ? hi - (float)rng.NextDouble() * Mathf.Min(80f, hi - lo)
+                             : r < SpectatorRules.FinishShare + SpectatorRules.StartShare ? lo + (float)rng.NextDouble() * Mathf.Min(80f, hi - lo)
                              : lo + (float)rng.NextDouble() * (hi - lo);
                 for (int k = 0; k < GroupSize && list.Count < want; k++)
                 {
@@ -1169,6 +2023,78 @@ namespace DescendersCyclingPOC
                 _bodyMats[index] = m;
             }
             return m;
+        }
+
+        // Skin tones. The game tints the body: PlayerCustomization.SetSkinColor(i) sets the rider's body material _Color to GameData's
+        // skin ColorPalette._colors[i] (IL). A copy keeps the rider's tint, so the whole crowd had the rider's skin. Each spectator's body gets a
+        // tone of that palette through a MaterialPropertyBlock: no material is changed or copied, and the copies that share the rider's own
+        // material (clothes off) never tint the rider. GameData has two palettes (skin, hair / beard), names obfuscated: the skin one is the one
+        // whose colour at the rider's SkinColour is the rider's tint (SpectatorRules.SkinPalette).
+        private Color[] _skinTones;
+        private int _riderSkin = -1;
+        private readonly MaterialPropertyBlock _skinBlock = new MaterialPropertyBlock();
+
+        private void FindSkinTones(GameObject rider)
+        {
+            _skinTones = null; _riderSkin = -1;
+            try
+            {
+                Type gdT = FindType("GameData"), cpT = FindType("ColorPalette"), pcT = FindType("PlayerCustomization");
+                if (object.ReferenceEquals(gdT, null) || object.ReferenceEquals(cpT, null)) { Log.Warn("Spectators: skin palette classes not found, the crowd keeps the rider's skin"); return; }
+                const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic;
+                object gd = null;
+                foreach (FieldInfo f in gdT.GetFields(all | BindingFlags.Static)) if (object.ReferenceEquals(f.FieldType, gdT)) { gd = f.GetValue(null); if (gd != null) break; }
+                FieldInfo colorsF = cpT.GetField("_colors", all | BindingFlags.Instance);
+                var palettes = new List<Color[]>();
+                if (gd != null && !object.ReferenceEquals(colorsF, null))
+                    foreach (FieldInfo f in gdT.GetFields(all | BindingFlags.Instance))
+                        if (object.ReferenceEquals(f.FieldType, cpT)) { object p = f.GetValue(gd); Color[] cs = p != null ? colorsF.GetValue(p) as Color[] : null; if (cs != null) palettes.Add(cs); }
+                if (palettes.Count == 0) { Log.Warn("Spectators: no colour palette in GameData (GameData " + (gd != null) + "), the crowd keeps the rider's skin"); return; }
+
+                // the rider's own tone and tint pick out the skin palette
+                Color tint = Color.white; bool haveTint = false;
+                foreach (SkinnedMeshRenderer r in rider.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                    if (r.name == "character_base" && r.sharedMaterial != null && r.sharedMaterial.HasProperty("_Color")) { tint = r.sharedMaterial.GetColor("_Color"); haveTint = true; break; }
+                Component pc = object.ReferenceEquals(pcT, null) ? null : rider.GetComponent(pcT);
+                MethodInfo rcP = object.ReferenceEquals(pcT, null) ? null : pcT.GetMethod("get_RiderCustomizations", all | BindingFlags.Instance);
+                object rc = pc != null && !object.ReferenceEquals(rcP, null) ? rcP.Invoke(pc, null) : null;
+                FieldInfo skinF = rc != null ? rc.GetType().GetField("SkinColour", all | BindingFlags.Instance) : null;
+                if (!object.ReferenceEquals(skinF, null)) _riderSkin = (int)skinF.GetValue(rc);
+                int pick = -1;
+                if (haveTint && _riderSkin >= 0)
+                {
+                    float[] pr = new float[palettes.Count], pg = new float[palettes.Count], pb = new float[palettes.Count];
+                    for (int i = 0; i < palettes.Count; i++)
+                    {
+                        bool has = _riderSkin < palettes[i].Length;
+                        pr[i] = has ? palettes[i][_riderSkin].r : -9f; pg[i] = has ? palettes[i][_riderSkin].g : -9f; pb[i] = has ? palettes[i][_riderSkin].b : -9f;
+                    }
+                    pick = SpectatorRules.SkinPalette(pr, pg, pb, tint.r, tint.g, tint.b);
+                }
+                string how = pick >= 0 ? "it holds the rider's tint at the rider's tone " + _riderSkin : "the first, as GameData declares it (the rider's tint " + (haveTint ? tint.ToString() : "unknown") + " at tone " + _riderSkin + " matched no single palette)";
+                if (pick < 0) pick = 0;
+                Color[] tones = palettes[pick];
+                var sb = new StringBuilder("Spectators: skin palette " + pick + " of " + palettes.Count + " (" + how + "), " + tones.Length + " tones:");
+                foreach (Color c in tones) { Color32 c32 = c; sb.Append(' ').Append(c32.r).Append('/').Append(c32.g).Append('/').Append(c32.b); }
+                Log.Info(sb.ToString());
+                if (tones.Length < 2) { Log.Info("Spectators: one skin tone only, the crowd keeps the rider's"); return; }
+                _skinTones = (Color[])tones.Clone();
+            }
+            catch (Exception ex) { Log.Warn("Spectators: reading the skin palette failed: " + ex.Message); _skinTones = null; }
+        }
+
+        /// <summary>Tint this copy's body (character_base, the head included; the hands are the gloves) as the game's SetSkinColor would.</summary>
+        private void TintSkin(GameObject g, Color tone)
+        {
+            foreach (SkinnedMeshRenderer r in g.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                if (r.name != "character_base") continue;
+                _skinBlock.Clear();
+                r.GetPropertyBlock(_skinBlock);
+                _skinBlock.SetColor("_Color", tone);
+                r.SetPropertyBlock(_skinBlock);
+                return;
+            }
         }
 
         // Rider body types (GameData -> RiderBodyTypes._bodyTypes, each BodyType.meshes). The game applies one by swapping a skinned mesh for the
@@ -1362,7 +2288,13 @@ namespace DescendersCyclingPOC
             elbow.rotation = Quaternion.FromToRotation(f, (Vector3.up + outward * 0.2f).normalized) * elbow.rotation;
         }
 
-        /// <summary>The finger chains of one hand (knuckle to tip; the thumb has 3 joints, the others 4), each only as far as its bones were found.</summary>
+        /// <summary>
+        /// The finger chains of one hand, each from the knuckle out to the last joint: the three joints that bend. The game numbers a finger's
+        /// bones from the END inwards (measured 2026-10-11 in the rest pose, cm from the wrist along the hand: Index1 16.2, Index2 13.6, Index3
+        /// 11.0, Index4 1.8; Thumb1 8.5, Thumb2 6.2, Thumb3 1.2): 1 is the last joint, 3 the knuckle, and a finger's 4 lies inside the palm at the
+        /// wrist and is left alone. The thumb keeps all three. Until then the chains were taken the other way round, which bent every
+        /// spectator's fingers backwards.
+        /// </summary>
         private static Transform[][] Fingers(Transform[] bones, string side)
         {
             var hand = new List<Transform[]>();
@@ -1375,14 +2307,18 @@ namespace DescendersCyclingPOC
                     if (b == null) break;
                     chain.Add(b);
                 }
-                if (chain.Count >= 2) hand.Add(chain.ToArray());
+                int[] order = SpectatorRules.BendingJoints(chain.Count);
+                if (order.Length < 2) continue;
+                var bending = new Transform[order.Length];
+                for (int i = 0; i < order.Length; i++) bending[i] = chain[order[i] - 1];
+                hand.Add(bending);
             }
             return hand.ToArray();
         }
 
         /// <summary>
-        /// The palm normal in the wrist's local frame, from the hand's own geometry: fingers F (wrist to middle knuckle) and the thumb side A (little-finger
-        /// knuckle to index knuckle). For a left hand the palm faces -(F x A), for a right hand +(F x A): the hands are mirror images.
+        /// The palm normal in the wrist's local frame, from the hand's own geometry: fingers F (wrist to the middle finger's last joint) and the thumb
+        /// side A (the little finger's last joint to the index finger's). For a left hand the palm faces -(F x A), for a right hand +(F x A): the hands are mirror images.
         /// </summary>
         private static Vector3 PalmLocal(Transform[] bones, string side, Transform wrist, float sign)
         {

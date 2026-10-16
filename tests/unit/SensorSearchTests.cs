@@ -5,7 +5,7 @@ namespace DescendersBridge;
 /// <summary>
 /// A chosen sensor that is never found must not starve the trainer channel. The rules for when a sensor channel searches,
 /// when it is closed and when it is tried again (<see cref="SensorSearch"/>, <see cref="SensorSearchRules"/>) on a simulated clock, with
-/// a fake "radio" that plays the stick's part (ends a search by itself, or not). Run by `turbotrainer-bridge selftest`; no radio.
+/// a fake "radio" that plays the stick's part (ends a search by itself, or not). Run by `FreeTurbo-Bridge selftest`; no radio.
 /// </summary>
 public static class SensorSearchTests
 {

@@ -167,7 +167,14 @@ public static class Ride
     private static void Learn(DeviceKey key, DeviceIdentity id) =>
         TrainerBridgeConfig.LearnManufacturers(new[] { (key, id.ManufacturerId) }, Console.WriteLine);
 
-    private static string NewLogPath() => Path.Combine(UsableLogsDir(Console.WriteLine), $"ride_{DateTime.Now:yyyyMMdd_HHmmss}.jsonl");
+    /// <summary>A new ride recording in the logs folder; the oldest go first, so there are never more than <see cref="LogsFolder.KeepRideRecordings"/>
+    /// (a `--log` file the developer named is never pruned by its own ride).</summary>
+    private static string NewLogPath()
+    {
+        string dir = UsableLogsDir(Console.WriteLine);
+        LogsFolder.Prune(dir, "ride_", ".jsonl", LogsFolder.KeepRideRecordings);
+        return Path.Combine(dir, $"ride_{DateTime.Now:yyyyMMdd_HHmmss}.jsonl");
+    }
 
     /// <summary>
     /// `run --sim`: the same ride loop, session and mod link as a real ride, with <see cref="SimTrainer"/> in place of the ANT+ stick

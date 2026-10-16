@@ -1,7 +1,7 @@
 using System.Text;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>Top-left IMGUI diagnostic panel (same OnGUI approach as Sandbox's SessionHUD).</summary>
     internal sealed class Hud
@@ -9,6 +9,9 @@ namespace DescendersCyclingPOC
         public bool Visible;
         public BridgeLauncher Launcher;   // TRAINER line: the bridge's status
         public WorldGate World;   // rider column and speedo arc only once the game world is up
+        public Spectators Crowd;   // PARTY MODE line: is the crowd out
+        /// <summary>The HUD's normal text: the bridge window's teal. Warnings keep their own colours.</summary>
+        public static readonly Color Accent = new Color32(HudRules.AccentR, HudRules.AccentG, HudRules.AccentB, 255);
 
         private string _text = "", _diagText = "";   // rider stats, then (below the workout panel) the developer diagnostics
         private readonly WorkoutPanel _panel = new WorkoutPanel();
@@ -33,7 +36,7 @@ namespace DescendersCyclingPOC
             var b = _sb; b.Length = 0;
             bool trainerOk = false;
             string trainer = Launcher != null ? Launcher.HudText(bridge, out trainerOk) : "";
-            AppendRider(b, stats, fm, erg, auto, trainer, trainerOk);
+            AppendRider(b, erg, auto, trainer, trainerOk);
             _text = b.ToString();
             _lost = fm.FailSafe;
             _vals[0] = fm.Active ? fm.Avg3W.ToString("F0") + " W" : "--";
@@ -42,7 +45,7 @@ namespace DescendersCyclingPOC
             if (!Config.HudDiagnostics) { _diagText = ""; return; }
             b.Length = 0;
             b.AppendLine("<b>DIAGNOSTICS</b>");
-            b.AppendLine("Build: " + BuildStamp.Text);
+            b.AppendLine("Build: " + BuildStamp.Text);   // developer panel only; the rider reads the build in the bridge window
             b.AppendLine();
             b.AppendLine("Player: " + Flag(s.PlayerFound));
             b.AppendLine("Vehicle: " + Flag(s.VehicleFound));
@@ -76,7 +79,7 @@ namespace DescendersCyclingPOC
             }
             else b.AppendLine("Bridge UDP: disabled");
             b.AppendLine();
-            b.Append("<size=11>" + key9 + " HUD   " + key7 + " speed-cap test   " + key8 + " dump   Home autosteer</size>");
+            b.Append("<size=11>" + key9 + " HUD   " + (key7 == "None" ? "" : key7 + " speed-cap test   ") + (key8 == "None" ? "" : key8 + " dump   ") + Config.AutoSteerKey + " autosteer</size>");
             _diagText = b.ToString();
         }
 
@@ -89,7 +92,7 @@ namespace DescendersCyclingPOC
                 // Menus / loading screens: only the developer diagnostics.
                 bool world = World == null || World.Ready;
                 bool left = Config.HudSide == "left";
-                float y = 12f;
+                float y = HudRules.TopY(Screen.height);   // below the game's own status box in that corner
                 if (world)
                 {
                     var content = new GUIContent(_text);
@@ -121,7 +124,7 @@ namespace DescendersCyclingPOC
                 _bg.Apply();
                 _style = new GUIStyle(GUI.skin.label);
                 _style.richText = true;
-                _style.normal.textColor = new Color(0.85f, 1f, 0.6f, 1f);
+                _style.normal.textColor = Accent;
                 _style.normal.background = _bg;
                 _style.padding = new RectOffset(10, 10, 8, 8);
                 _style.wordWrap = false;
@@ -129,24 +132,12 @@ namespace DescendersCyclingPOC
             _style.fontSize = Mathf.Max(11, Mathf.RoundToInt(Screen.height / 1080f * 15f));
         }
 
-        private static void AppendRider(StringBuilder b, RideStats stats, FitnessMode fm, ErgControl erg, AutoSteer auto, string trainer, bool trainerOk)
+        /// <summary>The rider block: the words and the layout are the pure HudRules; climbed metres and the build are in the bridge window.</summary>
+        private void AppendRider(StringBuilder b, ErgControl erg, AutoSteer auto, string trainer, bool trainerOk)
         {
-            if (trainer.Length > 0)
-                b.AppendLine("<size=13>TRAINER</size>  <size=16><b>" + (trainerOk ? trainer : "<color=#ffcc00>" + trainer + "</color>") + "</b></size>");
-            string mode = "<size=13>MODE</size>  <size=18><b>" + (erg.ErgRequested ? "<color=#ffcc00>" + erg.ModeLabel + "</color>" : erg.ModeLabel) + "</b></size>";
-            if (!erg.HaveSession) mode += "  <size=14><color=#ff6060>no trainer bridge</color></size>";   // ERG and workouts run in the bridge
-            b.AppendLine(mode);
-            string steer = auto == null ? "--" : auto.Engaged ? "<color=#ffcc00>ON</color>" : "OFF";
-            b.AppendLine("<size=13>AUTOSTEER</size>  <size=18><b>" + steer + "</b></size>");
-            if (erg.Note.Length > 0) b.AppendLine("<size=16><color=#ffcc00>" + erg.Note + "</color></size>");
-            // the workout itself is the WorkoutPanel; its .zwo text events are shown mid-screen by GameText
-            b.AppendLine(Row("CLIMBED", stats.ClimbedM.ToString("F0"), "m"));
-            b.Append("<size=11><color=#a0a0a0>build " + BuildStamp.Text + "</color></size>");   // which code is installed
-        }
-
-        private static string Row(string label, string value, string unit)
-        {
-            return "<size=13>" + label + "</size>\n<size=32><b>" + value + "</b></size> <size=15>" + unit + "</size>";
+            b.Append(HudRules.RiderBlock(trainer, trainerOk, erg.ModeLabel, erg.ErgRequested, Config.ErgToggleKey.ToString(),
+                auto == null ? (bool?)null : auto.Engaged, Config.AutoSteerKey.ToString(),
+                Crowd == null ? (bool?)null : Crowd.Active, Config.SpectatorKey.ToString(), erg.Note));
         }
 
         private static void AppendPath(StringBuilder b, AutoSteer a)

@@ -1,0 +1,22 @@
+<workout_file>
+  <author>FreeTurbo-Descenders</author>
+  <name>Starter Endurance 30</name>
+  <description>Week 1 of the FreeTurbo Starter plan. 30 minutes of easy, steady riding to get used to ERG mode and the course: 20 minutes at 65% of FTP between a gentle warm-up and cool-down. You should be able to talk the whole way.</description>
+  <sportType>bike</sportType>
+  <durationType>time</durationType>
+  <tags/>
+  <workout>
+    <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.65" pace="0">
+      <textevent timeoffset="5" message="Easy start. Find a rhythm."/>
+      <textevent timeoffset="240" message="Nearly warm. Steady block next."/>
+    </Warmup>
+    <SteadyState Duration="1200" Power="0.65" pace="0">
+      <textevent timeoffset="10" message="20 minutes steady. Talking pace."/>
+      <textevent timeoffset="600" message="Halfway. Relax your shoulders."/>
+      <textevent timeoffset="1140" message="One minute left in the block."/>
+    </SteadyState>
+    <Cooldown Duration="300" PowerLow="0.60" PowerHigh="0.40" pace="0">
+      <textevent timeoffset="5" message="Cool-down. Nice work."/>
+    </Cooldown>
+  </workout>
+</workout_file>

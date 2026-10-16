@@ -5,10 +5,10 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
-    /// One-shot diagnostic dumps written to the MelonLoader log and to UserData/DescendersCyclingPOC/.
+    /// One-shot diagnostic dumps written to the MelonLoader log and to UserData/FreeTurbo-Descenders/.
     /// Descenders' Vehicle members are obfuscated, so the useful trick (as in Sandbox's SpeedWatcher) is to
     /// dump values while doing something (pedal / brake / steer / jump) and diff two dumps.
     /// </summary>
@@ -127,7 +127,7 @@ namespace DescendersCyclingPOC
 
         /// <summary>
         /// Writes every course object the game generated (start/finish lines, checkpoints, guideline tapes) with full
-        /// position and orientation to UserData/DescendersCyclingPOC/course_*.csv, for designing the path extractor offline.
+        /// position and orientation to UserData/FreeTurbo-Descenders/course_*.csv, for designing the path extractor offline.
         /// </summary>
         public static void DumpCourse()
         {
@@ -168,7 +168,7 @@ namespace DescendersCyclingPOC
         /// Looks for the game's generated track: TerrainPathCarver (the in-game course generator) holds private
         /// 'track' and 'spline' objects whose base class stores a Vector3[] of path points, and TerrainInfo holds a
         /// public reference to the same kind of object. Everything is found by reflection (no obfuscated names
-        /// hard-coded) and written to UserData/DescendersCyclingPOC/trackpoints_*.csv.
+        /// hard-coded) and written to UserData/FreeTurbo-Descenders/trackpoints_*.csv.
         /// </summary>
         public static void DumpTrackPoints()
         {
@@ -363,10 +363,10 @@ namespace DescendersCyclingPOC
             catch (Exception ex) { Log.Error("Dump: writing file failed", ex); }
         }
 
-        /// <summary>Writes a dump to UserData/DescendersCyclingPOC/kind_scene.ext, overwriting the previous one of that kind and scene (DumpFiles).</summary>
+        /// <summary>Writes a dump to UserData/FreeTurbo-Descenders/kind_scene.ext, overwriting the previous one of that kind and scene (DumpFiles).</summary>
         private static string Write(string kind, string ext, string text)
         {
-            string dir = System.IO.Path.Combine("UserData", "DescendersCyclingPOC");
+            string dir = System.IO.Path.Combine("UserData", Names.Mod);
             Directory.CreateDirectory(dir);
             string file = System.IO.Path.Combine(dir, DumpFiles.FileName(kind, PlayerProbe.SceneName(), ext));
             File.WriteAllText(file, text);

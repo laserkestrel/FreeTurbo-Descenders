@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using MelonLoader;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>Thin wrapper over MelonLogger with rate limiting so per-frame failures don't flood the log.</summary>
     internal static class Log

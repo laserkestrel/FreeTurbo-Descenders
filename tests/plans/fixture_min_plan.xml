@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Hand-written minimal plan fixture for TP1 (docs/PLANS.md). Not derived from third-party data: see the repo hygiene note there. -->
-<plan name="LOC_TRAININGPLAN_TITLE_FIXTURE" author="Descenders Cycling POC test fixture" description="Two-block fixture used by turbotrainer-bridge selftest (TP1)." avg_hours_per_week="3" min_weeks="2" difficulty="1" supports_sports="CYCLING">
+<plan name="LOC_TRAININGPLAN_TITLE_FIXTURE" author="FreeTurbo-Descenders test fixture" description="Two-block fixture used by FreeTurbo-Bridge selftest (TP1)." avg_hours_per_week="3" min_weeks="2" difficulty="1" supports_sports="CYCLING">
   <block name="Week 1" description="Base week">
     <activity workout_filename="data/Workouts/Fixture/steady_a.xml" auid="fixture-a" priority="2" is_optional="0" workout_name="Steady A"/>
     <activity workout_filename="data/Workouts/Fixture/steady_b.xml" auid="fixture-b" priority="1" is_optional="0" workout_name="Steady B"/>

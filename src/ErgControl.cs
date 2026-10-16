@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// The game end of the training session. The bridge owns the ride mode (freeride | ERG), the manual ERG target, the
@@ -11,7 +11,7 @@ namespace DescendersCyclingPOC
     /// bridge window (its Workouts tab, bridge Menu.cs, docs/PLANS.md), not in the game (the in-game menu is gone). This class only
     /// reads the pad / keys and sends them as `intent` messages, keeps the latest `session` message for the HUD and the workout panel, and
     /// plays the sound / text / confetti of each new session event once.
-    /// With no `session` for a few seconds the HUD shows FREERIDE and "no trainer bridge": ERG and workouts need the bridge.
+    /// With no `session` for a few seconds the HUD shows FREERIDE (and "NO TRAINER BRIDGE" for a moment when a button is pressed): ERG and workouts need the bridge.
     /// Controls: hold RB and tap D-pad Up (the mode button: freeride -> ERG -> the loaded workout, V2.22) / Left / Right (target -/+, or workout bias -/+) / Down (skip a workout step), read straight
     /// from XInput (read-only), plus keyboard keys. Only while a ride is active (player found, game window focused).
     /// </summary>
@@ -75,7 +75,7 @@ namespace DescendersCyclingPOC
             PollPad();
         }
 
-        /// <summary>Take the latest session; play each new event once (SessionEventFilter). Stale: forget it, so the HUD says "no trainer bridge".</summary>
+        /// <summary>Take the latest session; play each new event once (SessionEventFilter). Stale: forget it, so the HUD says FREERIDE.</summary>
         private void UpdateSession()
         {
             SessionView v;
@@ -119,12 +119,13 @@ namespace DescendersCyclingPOC
             }
         }
 
-        /// <summary>The workout finished (or was skipped to the end): panel, sound, confetti. A plan session is recorded by the bridge.</summary>
+        /// <summary>The workout finished (or was skipped to the end): panel, sound, confetti, picture. A plan session is recorded by the bridge.</summary>
         private void Complete(SessionEvent e)
         {
             CompleteName = e.Name; CompleteTotalS = e.TotalS; _completeUntil = Time.unscaledTime + 5f;
             Sfx.PlayHere(Config.WorkoutDoneSound);
             Confetti.Burst(Config.WorkoutConfettiS);
+            WorkoutShot.Schedule(Config.WorkoutConfettiS);   // last-workout.png, also with no confetti
             Log.Info("Workout: '" + e.Name + "' " + (e.Skipped ? "skipped to the end" : "finished") + " at " + WorkoutRunner.Fmt(e.ElapsedS) + " of " + WorkoutRunner.Fmt(e.TotalS) + ", avg " + e.AvgW.ToString("F0") + " W"
                 + (e.Tag.Length > 0 ? " (plan session " + e.Tag + ", recorded by the bridge)" : ""));
         }

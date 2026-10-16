@@ -167,7 +167,7 @@ internal sealed class FakeFtmsRadio : IBleRadio
 /// The real <see cref="RideLoop"/> rides the fake FTMS trainer through the real <see cref="RideSource"/>, <see cref="FtmsSession"/>
 /// and <see cref="FtmsTrainerLink"/>: freeride gradient writes, "control not permitted" then recovered, ERG, a short workout, the trainer
 /// lost and back mid-workout (the session survives, the last target is written again), and the release at the end. No radio, no stick, no
-/// game: a real <see cref="ModLink"/> on ephemeral UDP ports (never 9871 / 9872) with the test as the game. Run by `turbotrainer-bridge selftest`.
+/// game: a real <see cref="ModLink"/> on ephemeral UDP ports (never 9871 / 9872) with the test as the game. Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class BluetoothRideTests
 {

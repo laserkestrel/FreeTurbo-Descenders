@@ -45,7 +45,7 @@ public static class BridgeConfig
     {
         string key = ConfigKey() ?? BuiltInKey()
             ?? throw new InvalidOperationException("No ANT+ network key: this build has none built in and config.json has none. "
-                + "Use a release build (or build with ANT_NETWORK_KEY set), or put ant.networkKey in config.json next to turbotrainer-bridge.exe (see bridge/config.example.json).");
+                + "Use a release build (or build with ANT_NETWORK_KEY set), or put ant.networkKey in config.json next to FreeTurbo-Bridge.exe (see bridge/config.example.json).");
         return AntNetworkKey.Parse(key);
     }
 

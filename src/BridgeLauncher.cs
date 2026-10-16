@@ -3,14 +3,14 @@ using System.Diagnostics;
 using System.IO;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
-    /// Starts the trainer bridge (turbotrainer-bridge.exe: a separate 32-bit .NET 8 process, it cannot load inside the game) when the game starts,
+    /// Starts the trainer bridge (FreeTurbo-Bridge.exe: a separate 32-bit .NET 8 process, it cannot load inside the game) when the game starts,
     /// without a window, as `run --auto`: it chooses the trainer itself and reports its state with the `status` message. A convenience only: the
-    /// bridge is the hub, the rider normally opens its window and launches the game from there. Started without `--parent`, so quitting
-    /// the game leaves the bridge, the session and the ride log running; the trainer goes flat when telemetry goes stale, and the headless bridge
-    /// stops by itself (releasing the trainer first) once no game has been connected for a while (AutoRun.IdleExitMinutes). The mod never kills it:
+    /// bridge is the hub, the rider normally opens its window and launches the game from there. Started without `--parent`; when the
+    /// game quits the mod says `bye` (Hello.Bye) and the headless bridge stops, releasing the trainer first. After a game crash it
+    /// stops by itself once no game has been connected for a while (GamePresence.AutoIdleExitMinutes). The mod never kills it:
     /// that would skip the release. Not started when a bridge, or anything else holding the telemetry port (a `run --sim` fake trainer), is already running.
     /// </summary>
     internal sealed class BridgeLauncher
@@ -33,8 +33,10 @@ namespace DescendersCyclingPOC
             }
             try
             {
-                // also the pre-rename exe name, in case an old install is still running
-                if (Process.GetProcessesByName(Config.BridgeProcessName).Length > 0 || Process.GetProcessesByName("descenders-bridge").Length > 0) { Log.Info("Bridge launcher: a bridge is already running, not starting another"); return; }
+                // also the pre-rename exe names, in case an old install is still running
+                bool running = Process.GetProcessesByName(Config.BridgeProcessName).Length > 0;
+                for (int i = 0; i < Names.OldBridgeNames.Length && !running; i++) running = Process.GetProcessesByName(Names.OldBridgeNames[i]).Length > 0;
+                if (running) { Log.Info("Bridge launcher: a bridge is already running, not starting another"); return; }
             }
             catch (Exception ex) { Log.Warn("Bridge launcher: process list unavailable (" + ex.Message + ")"); }
             bool inUse = PortProbe.UdpInUse(telemetryPort);
@@ -42,7 +44,7 @@ namespace DescendersCyclingPOC
             if (inUse) { Log.Info("Bridge launcher: UDP " + telemetryPort + " is already in use (a bridge, or one started by hand as `run --sim`), not starting one"); return; }
             try
             {
-                var psi = new ProcessStartInfo(exe, "run --auto");   // no --parent: the bridge outlives the game
+                var psi = new ProcessStartInfo(exe, "run --auto");   // no --parent: the mod's `bye` stops it when the game quits
                 psi.WorkingDirectory = Path.GetDirectoryName(exe);
                 if (Config.BridgeShowWindow) { psi.UseShellExecute = true; psi.WindowStyle = ProcessWindowStyle.Minimized; }
                 else { psi.UseShellExecute = false; psi.CreateNoWindow = true; }
@@ -81,7 +83,7 @@ namespace DescendersCyclingPOC
         {
             ok = false;
             string state, text;
-            if (link != null && link.TryGetStatus(3.0, out state, out text)) { ok = state == "connected"; return text; }
+            if (link != null && link.TryGetStatus(3.0, out state, out text)) { ok = state == "connected"; return HudRules.TrainerText(state, text); }
             TrainerSample s;
             if (link != null && link.TryGetTrainer(out s) && s.Connected && DateTime.UtcNow.Ticks - s.RecvTicks < 3 * TimeSpan.TicksPerSecond)
             { ok = true; return "Trainer connected"; }   // a bridge that sends no status (an older one)

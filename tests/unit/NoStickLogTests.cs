@@ -5,7 +5,7 @@ namespace DescendersBridge;
 /// <summary>
 /// With no ANT+ stick plugged in, the window's Logs tab showed the whole exception (type names, the inner exception, two stack
 /// traces). The rider reads that tab, so no stick is now one plain ERROR line; every other failure keeps its detail for a bug report.
-/// Run by `turbotrainer-bridge selftest`.
+/// Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class NoStickLogTests
 {

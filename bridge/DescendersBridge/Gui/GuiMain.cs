@@ -31,7 +31,7 @@ public static class GuiMain
             Application.ThreadException += (_, e) =>
             {
                 Console.WriteLine("ERROR (window): " + e.Exception);
-                MessageBox.Show("Something went wrong in the window. The Logs tab has the technical text, if someone asks for it.", "Turbo Trainer Bridge",
+                MessageBox.Show("Something went wrong in the window. The Logs tab has the technical text, if someone asks for it.", FreeTurboDescenders.Names.Bridge,
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             };
             Application.SetHighDpiMode(HighDpiMode.SystemAware);

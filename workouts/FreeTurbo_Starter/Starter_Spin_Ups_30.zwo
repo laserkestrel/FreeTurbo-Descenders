@@ -1,0 +1,22 @@
+<workout_file>
+  <author>FreeTurbo-Descenders</author>
+  <name>Starter Spin Ups 30</name>
+  <description>Week 1 of the FreeTurbo Starter plan. Six 30 second efforts just above FTP with 90 seconds easy after each, then a short steady spin. Short and sharp: a taste of intervals without digging deep.</description>
+  <sportType>bike</sportType>
+  <durationType>time</durationType>
+  <tags/>
+  <workout>
+    <Warmup Duration="480" PowerLow="0.40" PowerHigh="0.65" pace="0">
+      <textevent timeoffset="5" message="Warm-up. Six short efforts today."/>
+    </Warmup>
+    <IntervalsT Repeat="6" OnDuration="30" OffDuration="90" OnPower="1.05" OffPower="0.55" pace="0">
+      <textevent timeoffset="2" message="Effort 1 of 6. Lift the pace."/>
+      <textevent timeoffset="360" message="Halfway through the efforts."/>
+      <textevent timeoffset="602" message="Last one. Make it count."/>
+    </IntervalsT>
+    <SteadyState Duration="300" Power="0.65" pace="0">
+      <textevent timeoffset="5" message="Efforts done. Easy steady spin."/>
+    </SteadyState>
+    <Cooldown Duration="300" PowerLow="0.60" PowerHigh="0.40" pace="0"/>
+  </workout>
+</workout_file>

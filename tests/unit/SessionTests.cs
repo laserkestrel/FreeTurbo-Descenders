@@ -1,13 +1,13 @@
 using System.Text.Json;
 using DescendersBridge.Ant;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 
 /// <summary>
 /// The bridge owns the session (mode, manual ERG target, running workout) and tells the mod with the `session` message; the mod
 /// sends button presses as `intent` messages and acts on each event once (src\SessionView.cs). Also the `run --sim` fake trainer.
-/// Run by `turbotrainer-bridge selftest`; simulated clock, no radio, no game.
+/// Run by `FreeTurbo-Bridge selftest`; simulated clock, no radio, no game.
 /// </summary>
 public static class SessionTests
 {

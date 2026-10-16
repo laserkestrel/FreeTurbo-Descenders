@@ -39,8 +39,13 @@ public static class ModStatus
 
 /// <summary>Latest state reported by the mod (docs/IPC.md telemetry). <paramref name="Riding"/> = player found and the game not paused
 /// (telemetry `riding`; a mod that does not send it counts as riding whenever the player is found). <paramref name="RoadGradient"/> = telemetry
-/// `fitness.roadGradient`, the raw road gradient as a fraction (0.13 = 13 %); the bridge scales it by trainerDifficulty.</summary>
-public readonly record struct ModState(bool Seen, double AgeSeconds, bool PlayerFound, bool FitnessActive, double? RoadGradient, bool Riding = true);
+/// `fitness.roadGradient`, the raw road gradient as a fraction (0.13 = 13 %); the bridge scales it by trainerDifficulty.
+/// <paramref name="SpeedMs"/> = telemetry `speedMs`, the game's real speed in m/s (the rigidbody's, not the game-scale speedo).
+/// <paramref name="GameSpeedMs"/> = telemetry `gameSpeedKmh` / 3.6, the speed the game's own speedometer shows, in m/s: Descenders runs
+/// gravity 17.5, its speedo shows real speed x 9.81 / |g| (about 0.56, worked out in the mod, never here). The activity file's speed and
+/// distance use it, so the file matches what the rider saw on screen (80 W down the test course is 80 km/h in real metres,
+/// 45 on the speedo); null = a mod that does not send it, the file then falls back to <paramref name="SpeedMs"/>.</summary>
+public readonly record struct ModState(bool Seen, double AgeSeconds, bool PlayerFound, bool FitnessActive, double? RoadGradient, bool Riding = true, double? SpeedMs = null, double? GameSpeedMs = null);
 
 /// <summary>
 /// UDP link to the Descenders mod (docs/IPC.md): sends the `trainer` and `session` messages to 127.0.0.1:9872 and listens on 9871
@@ -57,7 +62,7 @@ public sealed class ModLink : IDisposable
     private readonly object _lock = new();
     private long _lastTicks;
     private bool _seen, _playerFound, _fitnessActive, _riding;
-    private double? _grade;
+    private double? _grade, _speedMs, _gameSpeedMs;
     private readonly ConcurrentQueue<Intent> _intents = new();
     private readonly SemaphoreSlim _intentArrived = new(0);
 
@@ -132,9 +137,13 @@ public sealed class ModLink : IDisposable
     /// <summary>The latest `hello` (which game is connected), null until one arrives.</summary>
     public GameHello? Hello { get { lock (_lock) return _hello; } }
 
-    /// <summary>`{"type":"shutdown"}` arrived (`turbotrainer-bridge stop`, used by the dev scripts before installing: the game's
+    /// <summary>`{"type":"shutdown"}` arrived (`FreeTurbo-Bridge stop`, used by the dev scripts before installing: the game's
     /// bridge outlives the game). Set by `run --auto` only; the window and `run` / `run --sim` ignore it. Called on the receive thread.</summary>
     public Action? ShutdownRequested { get; set; }
+
+    /// <summary>`{"type":"bye"}` arrived (src\Hello.cs): the game is quitting. Set by `run --auto` only, which then stops (a hidden
+    /// bridge left behind is no use to the rider); the window and `run` / `run --sim` log it and carry on. Called on the receive thread.</summary>
+    public Action? GameQuit { get; set; }
 
     /// <summary>Forget button presses queued while no ride was running (a shared link in `run --auto` listens from the start).</summary>
     public void DropIntents()
@@ -155,7 +164,7 @@ public sealed class ModLink : IDisposable
         get
         {
             lock (_lock)
-                return new ModState(_seen, _seen ? Stopwatch.GetElapsedTime(_lastTicks).TotalSeconds : double.PositiveInfinity, _playerFound, _fitnessActive, _grade, _riding);
+                return new ModState(_seen, _seen ? Stopwatch.GetElapsedTime(_lastTicks).TotalSeconds : double.PositiveInfinity, _playerFound, _fitnessActive, _grade, _riding, _speedMs, _gameSpeedMs);
         }
     }
 
@@ -223,10 +232,16 @@ public sealed class ModLink : IDisposable
                     if (announce) Console.WriteLine("Game connected: " + h.Describe());
                     continue;
                 }
-                if (type == "shutdown")   // `turbotrainer-bridge stop`: only the headless `run --auto` acts on it
+                if (type == "shutdown")   // `FreeTurbo-Bridge stop`: only the headless `run --auto` acts on it
                 {
                     if (ShutdownRequested is { } stop) stop();
-                    else Console.WriteLine("Asked to stop (turbotrainer-bridge stop): ignored, only a bridge the game started stops on request");
+                    else Console.WriteLine("Asked to stop (FreeTurbo-Bridge stop): ignored, only a bridge the game started stops on request");
+                    continue;
+                }
+                if (type == "bye")   // the game is quitting: only the headless `run --auto` stops on it
+                {
+                    if (GameQuit is { } quit) quit();
+                    else Console.WriteLine("The game quit.");
                     continue;
                 }
                 if (type == "intent")
@@ -239,12 +254,14 @@ public sealed class ModLink : IDisposable
                 bool player = root.TryGetProperty("playerFound", out var pf) && pf.ValueKind == JsonValueKind.True;
                 bool riding = root.TryGetProperty("riding", out var rd) ? rd.ValueKind == JsonValueKind.True : player;
                 bool active = false; double? grade = null;
+                double? speed = root.TryGetProperty("speedMs", out var sp) && sp.ValueKind == JsonValueKind.Number ? sp.GetDouble() : null;
+                double? gameSpeed = root.TryGetProperty("gameSpeedKmh", out var gs) && gs.ValueKind == JsonValueKind.Number ? gs.GetDouble() / 3.6 : null;
                 if (root.TryGetProperty("fitness", out var fit))
                 {
                     active = fit.TryGetProperty("active", out var a) && a.ValueKind == JsonValueKind.True;
                     if (fit.TryGetProperty("roadGradient", out var g) && g.ValueKind == JsonValueKind.Number) grade = g.GetDouble();
                 }
-                lock (_lock) { _seen = true; _lastTicks = Stopwatch.GetTimestamp(); _playerFound = player; _fitnessActive = active; _grade = grade; _riding = riding; }
+                lock (_lock) { _seen = true; _lastTicks = Stopwatch.GetTimestamp(); _playerFound = player; _fitnessActive = active; _grade = grade; _riding = riding; _speedMs = speed; _gameSpeedMs = gameSpeed; }
             }
             catch (OperationCanceledException) { return; }
             catch (ObjectDisposedException) { return; }

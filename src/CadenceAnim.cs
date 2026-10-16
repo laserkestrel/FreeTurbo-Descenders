@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Makes the rider's legs, the bike's cranks and the chain sound turn at the trainer's cadence.
@@ -35,7 +35,7 @@ namespace DescendersCyclingPOC
                 Log.Error("CadenceAnim: CyclistModel.Update / pedalPosition accessors not found (update " + ((object)update != null) + ", get " + ((object)_getPos != null) + ", set " + ((object)_setPos != null) + "); legs keep the game's own rate");
                 return;
             }
-            var harmony = new HarmonyLib.Harmony("descenders.cycling.poc.cadenceanim");
+            var harmony = new HarmonyLib.Harmony("freeturbo.descenders.cadenceanim");
             harmony.Patch(update, prefix: new HarmonyLib.HarmonyMethod(typeof(CadenceAnim).GetMethod("Prefix", BindingFlags.Public | BindingFlags.Static)));
             Log.Info("CadenceAnim: prefix installed on CyclistModel.Update (drives pedalPosition from the trainer cadence; CadenceLegs=" + Config.CadenceLegs + ")");
         }

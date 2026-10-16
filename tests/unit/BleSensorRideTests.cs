@@ -166,7 +166,7 @@ internal sealed class FakeSensorRadio : IBleRadio
 /// The real <see cref="RideLoop"/> rides a Bluetooth trainer with a Bluetooth heart-rate strap: the strap loses contact, drops out and
 /// comes back, and the ride never notices more than an absent heart rate. Then the one rule for which reading wins (a chosen power
 /// meter / cadence sensor against the trainer's own, on either transport), and a PC with no Bluetooth. No radio, no stick, no game: a
-/// real <see cref="ModLink"/> on ephemeral UDP ports with the test as the game. Run by `turbotrainer-bridge selftest`.
+/// real <see cref="ModLink"/> on ephemeral UDP ports with the test as the game. Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class BleSensorRideTests
 {

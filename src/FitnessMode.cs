@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Fitness mode: real pedalling power (from the bridge's `trainer` message) drives the bike's speed, like an indoor-cycling app.

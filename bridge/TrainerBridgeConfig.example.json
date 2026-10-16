@@ -74,6 +74,9 @@
   "logs": {
     "dir": ""
   },
+  "activities": {
+    "dir": ""
+  },
   "graphs": {
     "historySeconds": 300
   },

@@ -2,10 +2,11 @@ using System;
 using MelonLoader;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
-    /// Settings. Rider-facing ones are MelonPreferences entries (UserData/MelonPreferences.cfg, category "DescendersCyclingPOC");
+    /// Settings. Rider-facing ones are MelonPreferences entries (UserData/MelonPreferences.cfg, category "FreeTurbo-Descenders", Names.Mod; earlier "DescendersCyclingPOC",
+    /// which the installers rename in the file so saved settings are kept);
     /// developer tools and tuning constants are fixed below and changed in code (a saved cfg value would otherwise mask a new code default).
     /// </summary>
     internal static class Config
@@ -40,20 +41,29 @@ namespace DescendersCyclingPOC
         public static int TelemetryPort, CommandPort;
         public static bool BridgeAutoStart;
         public static string BridgePath;
-        public const string BridgeProcessName = "turbotrainer-bridge";   // the bridge exe's name, without .exe
-        private const string DefaultBridgePath = "DescendersBridge\\" + BridgeProcessName + ".exe";
+        public const string BridgeProcessName = Names.Bridge;   // the bridge exe's name, without .exe
+        private const string DefaultBridgePath = Names.DefaultBridgePath;
 
         // ---- developer tools (fixed) ----
-        public static readonly KeyCode WriteTestKey = KeyCode.F7, DumpKey = KeyCode.F8, RayProbeKey = KeyCode.Insert, PedalTestKey = KeyCode.F6, ZoneMapKey = KeyCode.End, SpectatorLabelKey = KeyCode.F11;
-        public static bool HudDiagnostics = false;       // old POC diagnostic panel below the rider stats
+        // DumpKey: None = no key (F8 is the auto-steer key now). Set a key here to dump the vehicle, terrain census, course and track points again.
+        // WriteTestKey: None = no key (F7 is the mode key now). Set a key here, or use the bridge's `command set_test_speed`.
+        // RayProbeKey: None = no key (Insert wrote ray_probe_<scene>.txt). Set a key here to probe the ground around the rider again.
+        public static readonly KeyCode WriteTestKey = KeyCode.None, DumpKey = KeyCode.None, RayProbeKey = KeyCode.None, PedalTestKey = KeyCode.F6, ZoneMapKey = KeyCode.End, SpectatorLabelKey = KeyCode.F11;
+        public static bool HudDiagnostics = false;       // old diagnostic panel below the rider stats
         public static readonly bool AutoCensusOnLoad = false;   // true: terrain census + course/track dumps 4 s after every level load (as DumpKey does); off so UserData stays clean
-        public static bool SpectatorLabels = false;      // debug label over each spectator; toggled at run time with SpectatorLabelKey
-        public static readonly float TestCapKmh = 10f, TestCapSeconds = 5f;   // F7 write test: speed cap and duration
+        public static readonly bool WriteFmodEventList = false;   // true: Sfx writes every loaded FMOD event path to UserData\<mod>\fmod_events.txt (docs/SOUNDS.md); off, the list was a one-time study
+        public static bool SpectatorLabels = false;     // debug label over each spectator; toggled at run time with SpectatorLabelKey
+        public static readonly float TestCapKmh = 10f, TestCapSeconds = 5f;   // speed-cap write test (WriteTestKey): speed cap and duration
         public static readonly string PedalTestLevels = "0.25,0.5,0.75,1.0";  // F6 T2 test: pedal levels forced in order
         public static readonly float PedalTestSeconds = 10f, PedalTestLeadInSeconds = 3f, PedalTestMaxKmh = 95f;   // game zeroes the pedal above ~99 km/h
         public static readonly float AutoStartDelaySec = 1.5f;   // lets the main menu finish initialising
         public static readonly int TelemetryHz = 20;
         public static readonly bool BridgeShowWindow = false;   // true: the auto-started bridge gets a minimised console window instead of none (its log file is written either way)
+        // night and day during a ride (DayCycle.cs): it goes with party mode (F10, no key of its own); midnight to noon in DayCycleNightToDayS, on round the clock
+        public static readonly float DayCycleNightToDayS = 360f;   // a day of 12 minutes (the rider, 2026-10-16); dawn and dusk take about 1.6 min of it (DayCycleRules.FadeSeconds)
+        public static readonly float DayCycleReturnS = 10f;   // party mode off: seconds to run the sky back to the course's own time of day (DayCycleRules.ReturnPlan), the shorter way round
+        public static readonly bool DayCycleSwitchesNight = true;   // the game's own night look (colour grading, fog, rays, moonlight, head torch, lamps) blends in as the sun goes down (DayCycleRules.NightAmount)
+        public static readonly float DayCycleShotSettleS = 1.5f;    // `daycycle_shots`: seconds at each hour before its picture (the sky's light and ambient catch up)
 
         // ---- tuning constants (fixed; see docs/FORCE_MODEL.md, docs/SPECTATORS.md) ----
         // auto-steer
@@ -76,17 +86,26 @@ namespace DescendersCyclingPOC
         // spectators
         public static readonly float SpectatorHatDropM = 0.05f, SpectatorFemaleShare = 0.4f, SpectatorCullM = 120f, SpectatorExciteM = 25f, SpectatorOffsetM = 5f;
         public static readonly bool SpectatorFemaleHair = true;
+        public static readonly bool SpectatorDodge = true;   // spectators run out of the way of a rider who heads at them (SpectatorRules.Threatened)
         public static readonly bool SpectatorHelmets = false;   // bare heads: hats and ears sit on the head (docs/SPECTATORS.md "Look")
         public static readonly bool SpectatorHair = false;      // experiment: the game's hair meshes hang out from under a helmet (a slab on a bare head) and applying them briefly changes the real rider's hair
         public static readonly float SpectatorNoiseGapS = 2.5f;
         public static readonly string[] SpectatorNoiseEvents = { "event:/sfx/noisemakers/bell/cow_high", "event:/sfx/noisemakers/bell/cow_low", "event:/sfx/noisemakers/horn/classic_1", "event:/sfx/noisemakers/horn/classic_2", "event:/sfx/noisemakers/horn/vuvu_good" };
         public static readonly int SpectatorBellRings = 3;
+        // the hands on top of a motion-capture clip (Spectators.ClipHandRoll ...: degrees about the fingers, towards the palm, towards the thumb side; curl 0 open .. 1 fist).
+        // 0 / 0 / 0 = as the recording has them; the recordings have no fingers, so the curl is ours (0.6 = half closed, paws). The rider judged this
+        // hand pose fine from the crowd_hands pictures, 2026-10-11 (docs/SPECTATORS.md "Motion capture").
+        public static readonly float SpectatorClipHandRoll = 0f, SpectatorClipHandFlex = 0f, SpectatorClipHandSide = 0f, SpectatorClipHandCurl = 0.6f;
+        public static readonly bool SpectatorAnimalClips = true;  // the spectators with a whole animal's head (SpectatorRules.IsAnimalHead) play the motion-capture clips (src\mocap\*.dmc) instead of cheering
+        public static readonly float SpectatorClipShare = 0.02f;  // ... but only this share of the whole crowd (SpectatorRules.PlaysClip); every animal's head was about a fifth, too many T-rexes (the rider, 2026-10-16)
+        public static readonly bool SpectatorSkinTones = true;    // each spectator gets a tone of the game's skin palette, spread evenly (SpectatorRules.NextTone); false = the rider's own
         // workouts
         public static readonly bool ErgPadEnabled = true;         // read the pad through XInput for the RB + D-pad chord
+        public static readonly float WorkoutShotDelayS = 1.5f;    // the picture of a completed workout: seconds after the end, so the confetti is across the screen (sooner with shorter confetti, WorkoutShotRules.DelayS)
 
         public static void Load()
         {
-            _cat = MelonPreferences.CreateCategory("DescendersCyclingPOC", "Descenders Cycling POC");
+            _cat = MelonPreferences.CreateCategory(Names.Mod, Names.Mod);
 
             // general
             var hudKey = _cat.CreateEntry("HudToggleKey", "F9", "HUD toggle key (Unity KeyCode name)");
@@ -101,13 +120,13 @@ namespace DescendersCyclingPOC
             var descPow = _cat.CreateEntry("DescentPowerFactor", 2.5f, "Fitness: on descents your watts count this many times over, so pedalling still adds speed (physics only; HUD and trainer use your real watts)");
             var cadLegs = _cat.CreateEntry("CadenceLegs", true, "Fitness: the rider's legs, cranks and chain sound turn at the trainer's cadence");
             // auto-steer
-            var asKey = _cat.CreateEntry("AutoSteerKey", "Home", "Toggle path-following auto-steer (needs a generated course)");
+            var asKey = _cat.CreateEntry("AutoSteerKey", HudRules.AutoSteerKey, "Toggle path-following auto-steer (needs a generated course)");
             var asAuto = _cat.CreateEntry("AutoSteerAutoEngage", true, "Engage auto-steer by itself when heart-rate or cadence data arrives from the trainer link");
             var sfxMode = _cat.CreateEntry("AutoSteerSound", "game", "Auto-steer sound cues: game (FMOD UI events), beep (synthesised tones), off");
             var utOn = _cat.CreateEntry("UTurnEnabled", true, "U-turns: in fitness mode slow the bike near each end of the course and turn it round automatically (auto-steer on)");
             var utSide = _cat.CreateEntry("UTurnSide", 1, "U-turns: 1 = turn right, -1 = turn left");
             // workouts / ERG
-            var ergKey = _cat.CreateEntry("ErgToggleKey", "F4", "ERG: key toggling freeride / ERG (pad: RB + D-pad Up)");
+            var ergKey = _cat.CreateEntry("ErgToggleKey", HudRules.ModeKey, "ERG: key toggling freeride / ERG (pad: RB + D-pad Up)");
             var ergUp = _cat.CreateEntry("ErgUpKey", "PageUp", "ERG: key raising the target one step (10 W; in a workout +5 %) (pad: RB + D-pad Right)");
             var ergDn = _cat.CreateEntry("ErgDownKey", "PageDown", "ERG: key lowering the target one step (10 W; in a workout -5 %) (pad: RB + D-pad Left)");
             var ergSkip = _cat.CreateEntry("ErgSkipKey", "Delete", "Workout: key skipping to the next step (pad: RB + D-pad Down)");
@@ -142,10 +161,16 @@ namespace DescendersCyclingPOC
             ClimbPhysicsScale = Mathf.Clamp(gscale.Value, 0.05f, 2f); DescentGradientScale = Mathf.Clamp(gscaleDown.Value, 0.05f, 2f); DescentPowerFactor = Mathf.Clamp(descPow.Value, 1f, 6f);
             CadenceLegs = cadLegs.Value;
 
-            AutoSteerKey = ParseKey(asKey.Value, KeyCode.Home); AsAutoEngage = asAuto.Value; SfxMode = SfxNorm(sfxMode.Value);
+            // The key moved from Home to F8: move a cfg still holding the old default to the new one.
+            string asMoved = HudRules.MigrateAutoSteerKey(asKey.Value);
+            if (asMoved != asKey.Value) { Log.Info("Config: AutoSteerKey moved from " + asKey.Value + " to " + asMoved); asKey.Value = asMoved; }
+            AutoSteerKey = ParseKey(asKey.Value, KeyCode.F8); AsAutoEngage = asAuto.Value; SfxMode = SfxNorm(sfxMode.Value);
             UTurnEnabled = utOn.Value; UTurnSide = utSide.Value >= 0 ? 1 : -1;
 
-            ErgToggleKey = ParseKey(ergKey.Value, KeyCode.F4); ErgUpKey = ParseKey(ergUp.Value, KeyCode.PageUp); ErgDownKey = ParseKey(ergDn.Value, KeyCode.PageDown);
+            // The key moved from F4 to F7: move a cfg still holding the old default to the new one.
+            string ergMoved = HudRules.MigrateModeKey(ergKey.Value);
+            if (ergMoved != ergKey.Value) { Log.Info("Config: ErgToggleKey moved from " + ergKey.Value + " to " + ergMoved); ergKey.Value = ergMoved; }
+            ErgToggleKey = ParseKey(ergKey.Value, KeyCode.F7); ErgUpKey = ParseKey(ergUp.Value, KeyCode.PageUp); ErgDownKey = ParseKey(ergDn.Value, KeyCode.PageDown);
             ErgSkipKey = ParseKey(ergSkip.Value, KeyCode.Delete);
             PadIndex = Clamp(padIdx.Value, 0, 3);
             WorkoutHudRows = Clamp(wRows.Value, 1, 30); WorkoutHudScale = Mathf.Clamp(wScale.Value, 0.5f, 3f); WorkoutHudOpacity = Mathf.Clamp(wOpac.Value, 0.15f, 1f);
@@ -160,8 +185,9 @@ namespace DescendersCyclingPOC
             TelemetryPort = Clamp(telemetryPort.Value, 1024, 65535);
             CommandPort = Clamp(commandPort.Value, 1024, 65535);
             BridgeAutoStart = brAuto.Value;
-            // The exe was renamed descenders-bridge.exe -> turbotrainer-bridge.exe: move a cfg still holding the old default to the new one.
-            if (string.Equals((brPath.Value ?? "").Trim(), "DescendersBridge\\descenders-bridge.exe", StringComparison.OrdinalIgnoreCase)) brPath.Value = DefaultBridgePath;
+            // The exe was renamed descenders-bridge.exe -> turbotrainer-bridge.exe -> FreeTurbo-Bridge.exe: move a cfg still holding an old default to the new one.
+            string brMoved = Names.MigrateBridgePath(brPath.Value);
+            if (brMoved != brPath.Value) { Log.Info("Config: BridgePath moved from " + brPath.Value + " to " + brMoved); brPath.Value = brMoved; }
             BridgePath = string.IsNullOrEmpty(brPath.Value) ? DefaultBridgePath : brPath.Value.Trim();
 
             _cat.SaveToFile(false);

@@ -7,7 +7,7 @@ namespace DescendersBridge;
 /// acts once, the D-pad repeats while held, the button -> action table, when the pad is listened to (the window in front and no game
 /// connected; a button held when listening starts must be let go first), when the window asks for the foreground, the wrap of the tabs,
 /// the question box, the hint line. The window itself, fed made-up pad readings, is in WindowDesignTests.
-/// Run by `turbotrainer-bridge selftest`.
+/// Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class PadNavTests
 {

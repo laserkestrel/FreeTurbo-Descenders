@@ -7,7 +7,7 @@ namespace DescendersBridge;
 /// The Bluetooth sensor bytes, pure. Heart Rate Measurement (8-bit, 16-bit, contact), CSC Measurement (with and without wheel
 /// data), cadence from crank data (across a revolution-count wrap and an event-time wrap, stop detection, then absent), Cycling Power
 /// Measurement (with and without crank data, the fields before it stepped over), and the small rules around them (which service a role
-/// listens to, what a scan offers for which role, the heart-rate words, the settings file). No radio. Run by `turbotrainer-bridge selftest`.
+/// listens to, what a scan offers for which role, the heart-rate words, the settings file). No radio. Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class BleSensorTests
 {

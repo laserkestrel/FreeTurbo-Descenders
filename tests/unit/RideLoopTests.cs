@@ -12,7 +12,7 @@ namespace DescendersBridge;
 /// A trainer write that takes 2 s and is not acknowledged (a poor radio link) must never delay the game-facing side of the ride
 /// loop. Drives the real <see cref="RideLoop.Tick"/> on a simulated clock (250 ms ticks) with a fake trainer whose writes end when the test
 /// says so, and a real <see cref="ModLink"/> on ephemeral UDP ports (never 9871 / 9872) with the test as the game: it counts the `trainer` /
-/// `session` messages of every tick. Run by `turbotrainer-bridge selftest`; no radio, no game.
+/// `session` messages of every tick. Run by `FreeTurbo-Bridge selftest`; no radio, no game.
 /// </summary>
 public static class RideLoopTests
 {

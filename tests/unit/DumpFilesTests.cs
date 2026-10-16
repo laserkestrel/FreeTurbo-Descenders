@@ -1,10 +1,10 @@
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 
 /// <summary>
 /// The automatic census on load is a developer option (off by default) and every dump overwrites one file per
-/// kind and scene. Compiled into the bridge and run by `turbotrainer-bridge selftest` (src\DumpFiles.cs is linked in too).
+/// kind and scene. Compiled into the bridge and run by `FreeTurbo-Bridge selftest` (src\DumpFiles.cs is linked in too).
 /// </summary>
 public static class DumpFilesTests
 {

@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Text;
 
 // Pure logic (no Unity, no logging): also compiled into the bridge's `selftest` (bridge/DescendersBridge.csproj links this file).
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>Minimal JSON writer (invariant culture, compact).</summary>
     internal sealed class JsonWriter

@@ -10,7 +10,7 @@ namespace DescendersBridge;
 /// during the ride", and the workout started in the bridge window was gone, so the game showed no workout panel until it was started again.
 /// A lost stick must not end the ride: <see cref="RecoveringSource"/> reads as "no trainer" until a new session opens, and the real
 /// <see cref="RideLoop.RunAsync"/> keeps ticking with its session (mode, workout) untouched. Fakes only: no stick, no game; a real
-/// <see cref="ModLink"/> on ephemeral UDP ports (never 9871 / 9872). Run by `turbotrainer-bridge selftest`.
+/// <see cref="ModLink"/> on ephemeral UDP ports (never 9871 / 9872). Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class StickRecoveryTests
 {

@@ -6,7 +6,7 @@ using System.IO;
 using System.Xml;
 
 // Pure logic (no Unity, no logging): also compiled into the bridge's `selftest` (bridge/DescendersBridge.csproj links this file).
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>One flat step of a workout. IntervalsT is expanded into alternating "on" / "off" steps.</summary>
     internal sealed class WorkoutStep

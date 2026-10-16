@@ -2,7 +2,7 @@
 using System;
 
 // Pure logic (no Unity, no logging): also compiled into the bridge (bridge/DescendersBridge.csproj links this file).
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// The bike-type presets: a fixed CdA + Crr pair per bike type, chosen in the bridge window (`rider.bikeType` in

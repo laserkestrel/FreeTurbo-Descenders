@@ -5,7 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>Latest {"type":"trainer"} state message from the bridge (latest-wins, not queued).</summary>
     internal struct TrainerSample
@@ -152,15 +152,31 @@ namespace DescendersCyclingPOC
 
         public void Start()
         {
-            _tx = new Thread(TxLoop) { IsBackground = true, Name = "CyclingPOC-UDP-TX" };
-            _rx = new Thread(RxLoop) { IsBackground = true, Name = "CyclingPOC-UDP-RX" };
+            _tx = new Thread(TxLoop) { IsBackground = true, Name = "FreeTurbo-UDP-TX" };
+            _rx = new Thread(RxLoop) { IsBackground = true, Name = "FreeTurbo-UDP-RX" };
             _tx.Start(); _rx.Start();
             Log.Info("Bridge: UDP started. Telemetry -> 127.0.0.1:" + _telemetryPort + " @ " + (1000 / _intervalMs) + " Hz; commands <- 127.0.0.1:" + _commandPort);
         }
 
-        public void Stop()
+        /// <param name="lastMessage">sent to the bridge before the threads stop (the `bye` of <see cref="Hello.Bye"/>); null = nothing.</param>
+        public void Stop(string lastMessage)
         {
             if (_stop) return;
+            if (lastMessage != null)
+            {
+                // its own socket, sent on this thread: the TX thread is about to stop and the game is about to exit
+                try
+                {
+                    var sock = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+                    try
+                    {
+                        sock.Bind(new IPEndPoint(IPAddress.Loopback, 0));   // 127.0.0.1 only
+                        Send(sock, new IPEndPoint(IPAddress.Loopback, _telemetryPort), lastMessage);
+                    }
+                    finally { sock.Close(); }
+                }
+                catch (Exception ex) { Log.Warn("Bridge: last message not sent (" + ex.GetType().Name + ": " + ex.Message + ")"); }
+            }
             _stop = true;
             _stopEvt.Set();
             try { var s = _rxSock; if (s != null) s.Close(); } catch (Exception) { /* unblocks the receive; nothing to report */ }

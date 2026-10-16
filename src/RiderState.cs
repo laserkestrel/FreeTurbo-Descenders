@@ -1,7 +1,7 @@
 #nullable disable
 using System;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// The rider profile the mod uses: only the bridge's `rider` message (docs/IPC.md; removed the cfg fallbacks). Until the first one

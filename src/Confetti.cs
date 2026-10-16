@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Screen-space confetti shower for a completed workout: IMGUI only (tinted Texture2D.whiteTexture, rotated with GUI.matrix), no assets.

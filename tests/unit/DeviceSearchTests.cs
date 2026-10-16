@@ -9,7 +9,7 @@ namespace DescendersBridge;
 /// four cases (stick + Bluetooth, Bluetooth only, stick only, neither), how a found row and a drop-down line name each kind, the status
 /// strip's words for a Bluetooth trainer, and that choosing the same trainer the other way replaces the role. Then the real
 /// <see cref="DeviceSearch"/> on a fake Bluetooth radio and a made-up (or missing) ANT+ stick. No stick, no radio, a temp folder only.
-/// Run by `turbotrainer-bridge selftest`.
+/// Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class DeviceSearchTests
 {

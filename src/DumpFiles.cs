@@ -1,12 +1,12 @@
 using System.IO;
 using System.Text;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Pure rules for the developer dumps, no Unity code, so the bridge `selftest` can check them.
     /// Every dump overwrites ONE file per kind and scene (e.g. course_Forest.csv) instead of a timestamped file per
-    /// dump: the census used to run on every level load and filled UserData\DescendersCyclingPOC\ with hundreds of files
+    /// dump: the census used to run on every level load and filled UserData\FreeTurbo-Descenders\ with hundreds of files
     /// next to progress.json and the workout library. The text dumps also go to MelonLoader\Latest.log line by line.
     /// </summary>
     internal static class DumpFiles

@@ -168,10 +168,18 @@ public sealed class ModernButton : Button, IMeasured
         set { _large = value; Font = value ? Theme.ButtonLarge : Theme.BodyBold; Size = Measure(0); }
     }
 
+    /// <summary>Never narrower than this (pixels), e.g. one button as wide as the two above it. 0 = as wide as its text needs.</summary>
+    public int MinWidth
+    {
+        get => _minWidth;
+        set { _minWidth = value; Size = Measure(0); }
+    }
+    private int _minWidth;
+
     public Size Measure(int width)
     {
         var t = TextRenderer.MeasureText(Text.Length > 0 ? Text : "X", Font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
-        return new Size(Math.Max(Theme.S(_large ? 160 : 84), t.Width + Theme.S(_large ? 48 : 30)), Font.Height + Theme.S(_large ? 24 : 14));
+        return new Size(Math.Max(_minWidth, Math.Max(Theme.S(_large ? 160 : 84), t.Width + Theme.S(_large ? 48 : 30))), Font.Height + Theme.S(_large ? 24 : 14));
     }
 
     protected override void OnTextChanged(EventArgs e)
@@ -231,7 +239,7 @@ public sealed class QuestionBox : Form
     public QuestionBox(string question)
     {
         Name = "QuestionBox";
-        Text = "Turbo Trainer Bridge";
+        Text = FreeTurboDescenders.Names.Bridge;
         Font = Theme.Body;
         BackColor = Theme.Page;
         ForeColor = Theme.Text;

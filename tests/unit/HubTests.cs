@@ -1,14 +1,14 @@
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 
 /// <summary>
 /// The bridge as the hub: the game's `hello` message (src\Hello.cs, read by <see cref="GameHello"/>), the presence rules
 /// (<see cref="GamePresence"/>: connected, ride log ended when the game has been gone a while, headless idle exit, the window's words) and
-/// <see cref="ModLink"/> ending / reopening the ride log. Run by `turbotrainer-bridge selftest`; temp files and an ephemeral UDP port only.
+/// <see cref="ModLink"/> ending / reopening the ride log. Run by `FreeTurbo-Bridge selftest`; temp files and an ephemeral UDP port only.
 /// </summary>
 public static class HubTests
 {
@@ -108,11 +108,36 @@ public static class HubTests
             mod.ShutdownRequested = () => Interlocked.Increment(ref stops);
             using (var udp = Loopback.Sender())
             {
-                byte[] b = Encoding.UTF8.GetBytes("{\"type\":\"shutdown\"}");   // what `turbotrainer-bridge stop` sends
+                byte[] b = Encoding.UTF8.GetBytes("{\"type\":\"shutdown\"}");   // what `FreeTurbo-Bridge stop` sends
                 udp.Send(b, b.Length, "127.0.0.1", mod.ListenPort);
             }
             for (int i = 0; i < 100 && Volatile.Read(ref stops) == 0; i++) Thread.Sleep(20);
             check(stops == 1, "`stop` reaches the headless bridge's handler (run --auto then releases the trainer and exits)");
+
+            // the game says `bye` when it quits; the headless bridge stops on it, a bridge with no handler (the window, run --sim) carries on
+            using (var doc = JsonDocument.Parse(Hello.Bye()))
+                check(doc.RootElement.GetProperty("type").GetString() == "bye" && doc.RootElement.GetProperty("game").GetString() == "descenders", $"the mod's bye message ({Hello.Bye()})");
+            int quits = 0;
+            mod.GameQuit = () => Interlocked.Increment(ref quits);
+            using (var udp = Loopback.Sender())
+            {
+                byte[] b = Encoding.UTF8.GetBytes(Hello.Bye());
+                udp.Send(b, b.Length, "127.0.0.1", mod.ListenPort);
+            }
+            for (int i = 0; i < 100 && Volatile.Read(ref quits) == 0; i++) Thread.Sleep(20);
+            check(quits == 1 && stops == 1, "the game's `bye` reaches the headless bridge's handler (run --auto then releases the trainer and exits), and is not a `stop`");
+            mod.GameQuit = null;
+            long rxBefore = Interlocked.Read(ref mod.RxCount);
+            using (var udp = Loopback.Sender())
+            {
+                byte[] b = Encoding.UTF8.GetBytes(Hello.Bye());
+                udp.Send(b, b.Length, "127.0.0.1", mod.ListenPort);
+                for (int i = 0; i < 100 && Interlocked.Read(ref mod.RxCount) == rxBefore; i++) Thread.Sleep(20);
+                b = Encoding.UTF8.GetBytes(Hello.Message("after bye"));
+                udp.Send(b, b.Length, "127.0.0.1", mod.ListenPort);
+            }
+            for (int i = 0; i < 100 && mod.Hello is not { Version: "after bye" }; i++) Thread.Sleep(20);
+            check(quits == 1 && mod.Hello is { Version: "after bye" }, "a bridge with no handler (the window, run --sim) ignores `bye` and keeps listening: the game may come back");
         }
         catch (SocketException ex) { check(false, "could not open a UDP port for the test: " + ex.Message); }
         finally { try { Directory.Delete(dir, true); } catch { } }

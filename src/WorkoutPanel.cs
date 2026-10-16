@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Indoor-cycling-app-style workout list (docs/REQUIREMENTS.md "Workout HUD", V2.18): header with time left and progress bar, the current section large on top,
@@ -67,11 +67,11 @@ namespace DescendersCyclingPOC
                 Text(new Rect(x + pad, cy, iw, 20f * s), planLine, false, 13, new Color(0.7f, 0.85f, 1f));
                 cy += 20f * s;
             }
-            Text(new Rect(x + pad, cy, iw, 20f * s), "Finish in " + _finishIn, false, 14, new Color(0.85f, 1f, 0.6f));
+            Text(new Rect(x + pad, cy, iw, 20f * s), "Finish in " + _finishIn, false, 14, Hud.Accent);
             cy += 22f * s;
             float frac = r.TotalS > 0f ? Mathf.Clamp01(r.ElapsedS / r.TotalS) : 0f;
             Fill(new Rect(x + pad, cy, iw, 6f * s), new Color(1f, 1f, 1f, 0.15f));
-            Fill(new Rect(x + pad, cy, iw * frac, 6f * s), new Color(0.85f, 1f, 0.6f));
+            Fill(new Rect(x + pad, cy, iw * frac, 6f * s), Hud.Accent);
             cy += 12f * s;
             if (r.Held) { Text(new Rect(x + pad, cy, iw, 20f * s), "On hold: RB + up to come back", false, 13, new Color(1f, 0.8f, 0f)); cy += 22f * s; }
             else if (!r.Started) { Text(new Rect(x + pad, cy, iw, 20f * s), "Start pedalling to begin", false, 13, new Color(1f, 0.8f, 0f)); cy += 22f * s; }
@@ -103,10 +103,10 @@ namespace DescendersCyclingPOC
                 cy += 40f * s;
             }
             int left = MoreRows(r);
-            if (left > 0) { Text(new Rect(x + pad, cy, iw, 22f * s), "+ " + left + " more", false, 13, new Color(0.85f, 1f, 0.6f)); cy += 24f * s; }
+            if (left > 0) { Text(new Rect(x + pad, cy, iw, 22f * s), "+ " + left + " more", false, 13, Hud.Accent); cy += 24f * s; }
 
             int pct = Mathf.RoundToInt(100f + r.BiasPct);
-            Text(new Rect(x + pad, cy + 4f * s, iw, 22f * s), "Bias " + pct + "%      RB + left / right", false, 12, new Color(0.85f, 1f, 0.6f));
+            Text(new Rect(x + pad, cy + 4f * s, iw, 22f * s), "Bias " + pct + "%      RB + left / right", false, 12, Hud.Accent);
         }
 
         private void DrawComplete(ErgControl erg, float x, float y, float w, float s)
@@ -118,7 +118,7 @@ namespace DescendersCyclingPOC
             }
             float pad = 10f * s;
             Text(new Rect(x + pad, y + 6f * s, w - 2f * pad, 22f * s), erg.CompleteName, false, 16, Color.white);
-            Text(new Rect(x + pad, y + 30f * s, w - 2f * pad, 34f * s), "Workout complete", false, 24, new Color(0.85f, 1f, 0.6f));
+            Text(new Rect(x + pad, y + 30f * s, w - 2f * pad, 34f * s), "Workout complete", false, 24, Hud.Accent);
             Text(new Rect(x + pad, y + 66f * s, w - 2f * pad, 22f * s), _completeText, false, 14, Color.white);
         }
 

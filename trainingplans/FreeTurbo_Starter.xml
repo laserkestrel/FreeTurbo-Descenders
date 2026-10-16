@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- FreeTurbo Starter: the project's own sample training plan, hand-written for FreeTurbo-Descenders (docs/PLANS.md).
+     Put this file in your workout library's TrainingPlans folder and the FreeTurbo_Starter folder from this repo's workouts\
+     in its Workouts folder. workout_filename names the .xml file the plan format expects; the bridge also finds the .zwo
+     with the same name (docs/PLANS.md V3.8). The scheduling attributes are kept to show the format; the bridge ignores
+     them and offers the sessions in order (V3.1). -->
+<plan
+    author="FreeTurbo-Descenders"
+    avg_hours_per_week="2.0"
+    difficulty="1"
+    min_weeks="2"
+    days_per_block="7"
+    supports_sports="CYCLING"
+    name="FreeTurbo Starter"
+    tags="starter,endurance,sample"
+    short_description="Two easy weeks to get going with ERG mode and workouts."
+    description="A two week starter plan for riding Descenders on a smart trainer. Week 1 is short steady rides, a few tempo blocks and some spin-ups; week 2 rides a little longer and adds sweet spot and hill repeats. Each week has an optional recovery spin. Targets follow your FTP from the bridge window, so set it first."
+    plan_start_dayofweek="-1">
+
+  <block name="Week 1: Find your legs" description="Short, mostly steady rides to get used to ERG mode, the course and the workout panel." priority="0">
+    <activity auid="9101" is_preplan="0" priority="1" relative_to_plan_start="1" starting_offset="0" window_duration="168" workout_filename="data/Workouts/FreeTurbo_Starter/Starter_Endurance_30.xml" workout_name="Endurance 30" blackout_duration="0" is_optional="0"/>
+    <activity auid="9102" is_preplan="0" priority="2" relative_to_plan_start="1" starting_offset="48" window_duration="168" workout_filename="data/Workouts/FreeTurbo_Starter/Starter_Tempo_Blocks_40.xml" workout_name="Tempo Blocks 40" blackout_duration="0" is_optional="0"/>
+    <activity auid="9103" is_preplan="0" priority="3" relative_to_plan_start="1" starting_offset="96" window_duration="168" workout_filename="data/Workouts/FreeTurbo_Starter/Starter_Spin_Ups_30.xml" workout_name="Spin Ups 30" blackout_duration="0" is_optional="0"/>
+    <activity auid="9104" is_preplan="0" priority="4" relative_to_plan_start="1" starting_offset="120" window_duration="168" workout_filename="data/Workouts/FreeTurbo_Starter/Starter_Recovery_20.xml" workout_name="Recovery 20" blackout_duration="0" is_optional="1"/>
+  </block>
+
+  <block name="Week 2: Build" description="A little longer, with the first sweet spot efforts and some climbing." priority="1">
+    <activity auid="9201" is_preplan="0" priority="1" relative_to_plan_start="1" starting_offset="168" window_duration="168" workout_filename="data/Workouts/FreeTurbo_Starter/Starter_Endurance_45.xml" workout_name="Endurance 45" blackout_duration="0" is_optional="0"/>
+    <activity auid="9202" is_preplan="0" priority="2" relative_to_plan_start="1" starting_offset="216" window_duration="168" workout_filename="data/Workouts/FreeTurbo_Starter/Starter_Sweet_Spot_3x8.xml" workout_name="Sweet Spot 3x8" blackout_duration="0" is_optional="0"/>
+    <activity auid="9203" is_preplan="0" priority="3" relative_to_plan_start="1" starting_offset="264" window_duration="168" workout_filename="data/Workouts/FreeTurbo_Starter/Starter_Hill_Repeats_45.xml" workout_name="Hill Repeats 45" blackout_duration="0" is_optional="0"/>
+    <activity auid="9204" is_preplan="0" priority="4" relative_to_plan_start="1" starting_offset="288" window_duration="168" workout_filename="data/Workouts/FreeTurbo_Starter/Starter_Recovery_20.xml" workout_name="Recovery 20" blackout_duration="0" is_optional="1"/>
+  </block>
+</plan>

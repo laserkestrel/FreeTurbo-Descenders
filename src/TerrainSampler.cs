@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Ground-height and gradient sampler that works on Unity Terrain, mesh ramps/bumps and mixtures, and is not

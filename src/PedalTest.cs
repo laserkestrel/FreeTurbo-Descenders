@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// T2 harness: forces Vehicle.j[fCiJt (pedal, 0..1) to a fixed level, or steps through a list of levels, every physics

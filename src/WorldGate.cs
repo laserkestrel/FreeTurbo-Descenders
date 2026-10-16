@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Is the game world up? True once Player_Human, its Vehicle and Rigidbody exist and the game's StateMachine

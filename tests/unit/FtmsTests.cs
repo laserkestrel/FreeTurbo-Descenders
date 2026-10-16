@@ -5,7 +5,7 @@ namespace DescendersBridge;
 /// <summary>
 /// The Bluetooth Fitness Machine Service (FTMS) bytes, pure. Indoor Bike Data decode for several flag combinations (fields to
 /// skip, power / cadence absent), every control-point command byte for byte, the response decode, the power-range clamp, and the small
-/// rules around the radio (address text, "This PC has no Bluetooth"). No radio. Run by `turbotrainer-bridge selftest`.
+/// rules around the radio (address text, "This PC has no Bluetooth"). No radio. Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class FtmsTests
 {

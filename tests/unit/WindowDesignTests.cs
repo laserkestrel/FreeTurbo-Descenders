@@ -32,10 +32,13 @@ public static class WindowDesignTests
         "PowerTile", "PowerTitle", "PowerValue", "PowerUnit", "PowerGraph", "PowerHealth", "CadenceTile", "CadenceValue", "CadenceGraph", "CadenceHealth",
         "HeartRateTile", "HeartRateValue", "HeartRateGraph", "HeartRateHealth", "SpeedTile", "SpeedValue", "SpeedGraph", "SpeedHealth",
         "SearchButton", "SearchProgress", "SearchStatus", "FoundList", "TrainerChoice", "HeartRateChoice", "CadenceChoice", "PowerChoice", "SaveDevicesButton", "DevicesStatus",
-        "RiderWeight", "BikeWeight", "Ftp", "WheelDiameter", "GearRatio", "BikeType", "SaveRiderButton", "UndoRiderButton", "RiderStatus", "ConfigPath",
+        "RiderWeight", "BikeWeight", "Ftp", "WheelDiameter", "GearRatio", "BikeType", "SaveRiderButton", "UndoRiderButton", "RiderStatus",
         "TrainerDifficulty", "ErgStartW", "ErgMinW", "ErgMaxW", "ErgStepW", "WorkoutBiasStepPct",
         "SaveTrainingButton", "UndoTrainingButton", "StandardTrainingButton", "TrainingStatus",
-        "LibraryDir", "BrowseLibraryButton", "SaveLibraryButton", "LibraryStatus", "LogsDir", "BrowseLogsButton", "SaveLogsButton", "LogsStatus", "ActivePlan", "NextSession", "LogText", "OpenLogsButton",
+        "LibraryDir", "BrowseLibraryButton", "SaveLibraryButton", "LibraryStatus", "LogsDir", "BrowseLogsButton", "SaveLogsButton", "LogsStatus", "ActivePlan", "NextSession", "LogText",
+        // the Logs tab's one folders card: the activities folder is a box with Browse... and Save like the other two, and the
+        // settings folder has a button (ConfigPath, BuildText, OpenLogsButton and OpenActivitiesButton are gone on purpose)
+        "ActivitiesDir", "BrowseActivitiesButton", "SaveActivitiesButton", "ActivitiesStatus", "SettingsDir", "OpenSettingsButton", "SettingsStatus",
         // workouts and training plans are chosen on the Workouts tab
         // (StartSessionButton and StartWorkoutButton are gone: Enter or a click on the chosen entry / its graph starts)
         "PlanChoice", "ResetPlanButton", "PlanProgress", "SessionChoice", "WorkoutFolderChoice", "WorkoutChoice", "WorkoutDetail", "NowRiding",
@@ -212,25 +215,40 @@ public static class WindowDesignTests
                 }
             }
 
-            // the settings file's path is on the Logs tab only, in its own area above the log, which scrolls by itself
-            Control cfgPath = w.Controls.Find("ConfigPath", true)[0], logText = w.Controls.Find("LogText", true)[0];
+            // the log scrolls by itself; above it one card holds the three folders and the settings folder button. The build and
+            // the settings file's path are not on the tab (the log has the build, the title bar its version number, the button shows the file)
+            Control logText = w.Controls.Find("LogText", true)[0], openSettings = w.Controls.Find("OpenSettingsButton", true)[0];
             static Rectangle OnScreen(Control c) => c.RectangleToScreen(c.ClientRectangle);
-            Check(tabs.TabPages[5].Contains(cfgPath) && cfgPath.Text.EndsWith(TrainerBridgeConfig.Path, StringComparison.Ordinal) && tabs.TabPages[5].Contains(w.Controls.Find("OpenLogsButton", true)[0]),
-                $"Logs: the settings file's path and the logs folder button are on this tab (got '{cfgPath.Text}')");
-            Check(CardOf(cfgPath) is { } about && CardOf(logText) is { } logCard && !ReferenceEquals(about, logCard) && about.Controls.Find("BuildText", true).Length == 1
-                && OnScreen(about).Bottom <= OnScreen(logCard).Top && logText is TextBox { Multiline: true, ScrollBars: ScrollBars.Both },
-                "Logs: the build and the settings file sit in their own area above the log, and the log has its own scroll bars");
+            var folderBoxes = new[] { "LibraryDir", "ActivitiesDir", "LogsDir", "SettingsDir" }.Select(n => w.Controls.Find(n, true)[0]).ToList();
+            Check(CardOf(openSettings) is { } foldersCard && folderBoxes.All(b => ReferenceEquals(CardOf(b), foldersCard)) && Cards(tabs.TabPages[5]) == 2
+                && folderBoxes.All(b => OnScreen(b).Left == OnScreen(folderBoxes[0]).Left && OnScreen(b).Width == OnScreen(folderBoxes[0]).Width)
+                && Enumerable.Range(1, 3).All(i => OnScreen(folderBoxes[i - 1]).Top < OnScreen(folderBoxes[i]).Top),
+                "Logs: one card holds the workout library, activities, logs and settings folders, their boxes lined up under each other");
+            Control saveLogs = w.Controls.Find("SaveLogsButton", true)[0], browseLogs = w.Controls.Find("BrowseLogsButton", true)[0];
+            Check(folderBoxes[3] is TextBox { ReadOnly: true } settingsBox && settingsBox.Text == Path.GetDirectoryName(Path.GetFullPath(TrainerBridgeConfig.Path))
+                && openSettings is ModernButton && OnScreen(openSettings).Top == OnScreen(folderBoxes[3].Parent!).Top
+                && OnScreen(openSettings).Left == OnScreen(browseLogs).Left && OnScreen(openSettings).Right == OnScreen(saveLogs).Right
+                && new[] { "BrowseSettingsButton", "SaveSettingsButton" }.All(n => w.Controls.Find(n, true).Length == 0)
+                && Text(w, "SettingsStatus").Contains(TrainerBridgeConfig.FileName, StringComparison.Ordinal),
+                $"Logs: the settings folder is shown, not chosen: a box that cannot be typed in and one button under Browse... and Save (box '{folderBoxes[3].Text}')");
+            Check(new[] { "ConfigPath", "BuildText", "AboutBox", "OpenLogsButton", "OpenActivitiesButton" }.All(n => w.Controls.Find(n, true).Length == 0)
+                && w.Text == BridgeWindow.Title(BuildStamp.Text, true),
+                "Logs: no build text, settings path or open-folder buttons for the logs / activities (the version is in the title bar)");
+            Check(CardOf(logText) is { } logCard && !ReferenceEquals(CardOf(openSettings), logCard)
+                && OnScreen(CardOf(openSettings)!).Bottom <= OnScreen(logCard).Top && logText is TextBox { Multiline: true, ScrollBars: ScrollBars.Both },
+                "Logs: the folders sit in their own area above the log, and the log has its own scroll bars");
             // the workout library folder (moved from the Workouts tab) and the logs folder sit together on the Logs tab,
-            // between the build / settings file area and the log
+            // above the log
             Control libDir = w.Controls.Find("LibraryDir", true)[0], logsDir = w.Controls.Find("LogsDir", true)[0];
             Check(CardOf(libDir) is { } folders && ReferenceEquals(folders, CardOf(logsDir)) && tabs.TabPages[5].Contains(folders)
                 && new[] { "BrowseLibraryButton", "SaveLibraryButton", "LibraryStatus", "BrowseLogsButton", "SaveLogsButton", "LogsStatus" }.All(n => folders.Controls.Find(n, true).Length == 1)
                 && !All(tabs.TabPages[1]).Any(c => c.Name.Contains("Library", StringComparison.Ordinal))
-                && OnScreen(CardOf(cfgPath)!).Bottom <= OnScreen(folders).Top && OnScreen(folders).Bottom <= OnScreen(CardOf(logText)!).Top,
+                && OnScreen(folders).Bottom <= OnScreen(CardOf(logText)!).Top,
                 "Logs: the workout library folder and the logs folder are in one area on this tab, each with Browse... and Save; the Workouts tab has no library folder");
             Check(libDir is TextBox && logsDir is TextBox && libDir.Parent!.Left == logsDir.Parent!.Left && libDir.Parent.Width == logsDir.Parent.Width && logsDir.Parent.Width >= Theme.S(250),
                 $"Logs: the two folder boxes line up under each other and have room for a path (library {libDir.Parent!.Bounds}, logs {logsDir.Parent!.Bounds})");
             await LogsFolderBox(w, Check);
+            await ActivitiesFolderBox(w, Check);
 
             var savedIn = new[] { 3, 4 }.SelectMany(i => All(tabs.TabPages[i])).Where(c => c is Label && c.Text.Contains(TrainerBridgeConfig.Path, StringComparison.Ordinal)).ToList();
             Check(savedIn.Count == 0, "Rider and bike, Resistance: no line saying where the settings file is");
@@ -501,9 +519,9 @@ public static class WindowDesignTests
         Check(ReferenceEquals(w.ActiveControl, folders) && Text(w, "WorkoutHint") == "A to start", "pad: used again, the hint names A again");
 
         // Reset plan: reachable with the D-pad once the plan has a finished session, pressed with A
-        var store = DescendersCyclingPOC.ProgressFile.Load(TrainerBridgeConfig.Path).Store;
+        var store = FreeTurboDescenders.ProgressFile.Load(TrainerBridgeConfig.Path).Store;
         store.RecordCompletion("builder", "b0.a0", "Intervals/w1d1.zwo", "2026-10-04T10:00:00Z", 1080, 150, 180, 100, false);
-        DescendersCyclingPOC.ProgressFile.Save(TrainerBridgeConfig.Path, store);
+        FreeTurboDescenders.ProgressFile.Save(TrainerBridgeConfig.Path, store);
         Press(LB);
         Press(RB);   // away and back: the tab reads the settings file again
         await Pump(200);
@@ -516,7 +534,7 @@ public static class WindowDesignTests
         Check(first && second && ReferenceEquals(w.ActiveControl, reset), "pad: with something to reset, Reset plan is the first stop under the tab strip, the plan picker the next");
         Press(A);   // the demo skips the "are you sure" question (asked below)
         await Pump(Settle);
-        Check(!reset.Enabled && DescendersCyclingPOC.ProgressFile.Load(TrainerBridgeConfig.Path).Store.Plans["builder"].Completed.Count == 0
+        Check(!reset.Enabled && FreeTurboDescenders.ProgressFile.Load(TrainerBridgeConfig.Path).Store.Plans["builder"].Completed.Count == 0
             && Text(w, "NowRiding").Contains("starts again", StringComparison.Ordinal), $"pad: A on Reset plan resets the plan (got '{Text(w, "NowRiding")}')");
 
         // the question box ("are you sure?", and closing with a game connected): No is focused; D-pad left / right, A, B
@@ -630,7 +648,7 @@ public static class WindowDesignTests
         Check(Text(w, "PlanHint").Length == 0, "on the plan picker with no plan followed there is nothing to start: no hint");
         Check(window.WorkoutsCommand(NavCommand.Next) && plans.Index == 1 && plans.Pending && sessions.Count == 0, "Right steps to the plan; nothing is saved until the picker settles");
         await Pump(Settle);
-        Check(DescendersCyclingPOC.ProgressFile.Load(TrainerBridgeConfig.Path).Store.ActivePlan == "builder" && plans.Count == 1 && plans.Model.Current == new PickerEntry("Eight week builder", "0 of 24 done")
+        Check(FreeTurboDescenders.ProgressFile.Load(TrainerBridgeConfig.Path).Store.ActivePlan == "builder" && plans.Count == 1 && plans.Model.Current == new PickerEntry("Eight week builder", "0 of 24 done")
             && !plans.Model.CanPrevious && !plans.Model.CanNext,
             $"choosing a plan follows it: saved as the active plan, shown with its progress under it (got '{plans.Text}', '{plans.Model.Current?.Detail}')");
         Check(Text(w, "ActivePlan").Length == 0 && Text(w, "NextSession") == "Next session: Week 1 Day 1 Session Week 1 day 1" && sessions.Count == 25
@@ -759,7 +777,7 @@ public static class WindowDesignTests
         await Task.Delay(150);
         Control box = w.Controls.Find("LogsDir", true)[0];
         var save = (Button)w.Controls.Find("SaveLogsButton", true)[0];
-        Check(box.Text == Ride.DefaultLogsDir && Text(w, "LogsStatus").StartsWith("The standard folder", StringComparison.Ordinal) && TrainerBridgeConfig.LoadLogsDir() == "",
+        Check(box.Text == Ride.DefaultLogsDir && Text(w, "LogsStatus") == "Logs for troubleshooting and support." && TrainerBridgeConfig.LoadLogsDir() == "",
             $"Logs: the logs folder box starts on the standard folder (got '{box.Text}', '{Text(w, "LogsStatus")}')");
         box.Text = "relative\\logs";
         save.PerformClick();
@@ -775,6 +793,37 @@ public static class WindowDesignTests
         await Task.Delay(150);
         Check(Text(w, "LogsStatus").StartsWith("Saved", StringComparison.Ordinal) && TrainerBridgeConfig.LoadLogsDir() == "" && Ride.LogsDir == Ride.DefaultLogsDir && box.Text == Ride.DefaultLogsDir,
             $"Logs: an empty box goes back to the standard folder (got '{Text(w, "LogsStatus")}', box '{box.Text}')");
+    }
+
+    /// <summary>
+    /// The activities folder box on the Logs tab (the caller has that tab open), with the logs folder's rules: it starts on the standard
+    /// folder; a relative path is refused; another folder is made, stored in the settings file's `activities` section and used; an empty
+    /// box goes back to the standard one.
+    /// </summary>
+    private static async Task ActivitiesFolderBox(Form w, Action<bool, string> Check)
+    {
+        Control box = w.Controls.Find("ActivitiesDir", true)[0];
+        var save = (Button)w.Controls.Find("SaveActivitiesButton", true)[0];
+        string standard = ActivityFiles.StandardDir;
+        Check(box.Text == standard && Text(w, "ActivitiesStatus").StartsWith("Activity files (.fit) saved after each ride, for uploading", StringComparison.Ordinal)
+            && TrainerBridgeConfig.LoadActivitiesDir() == "",
+            $"Logs: the activities folder box starts on the standard folder (got '{box.Text}', '{Text(w, "ActivitiesStatus")}')");
+        box.Text = "relative\\rides";
+        save.PerformClick();
+        Check(Text(w, "ActivitiesStatus").StartsWith("Not saved", StringComparison.Ordinal) && TrainerBridgeConfig.LoadActivitiesDir() == "",
+            $"Logs: a relative activities folder is refused (got '{Text(w, "ActivitiesStatus")}')");
+        string own = Path.Combine(Path.GetDirectoryName(TrainerBridgeConfig.Path)!, "My rides");
+        box.Text = "  " + own + " ";
+        save.PerformClick();
+        await Task.Delay(150);
+        Check(Text(w, "ActivitiesStatus").StartsWith("Saved", StringComparison.Ordinal) && TrainerBridgeConfig.LoadActivitiesDir() == own && Directory.Exists(own)
+            && ActivityFiles.Dir == own && box.Text == own,
+            $"Logs: another activities folder is made, saved and used from then on (got '{Text(w, "ActivitiesStatus")}', settings '{TrainerBridgeConfig.LoadActivitiesDir()}')");
+        box.Text = "";
+        save.PerformClick();
+        await Task.Delay(150);
+        Check(Text(w, "ActivitiesStatus").StartsWith("Saved", StringComparison.Ordinal) && TrainerBridgeConfig.LoadActivitiesDir() == "" && ActivityFiles.Dir == standard && box.Text == standard,
+            $"Logs: an empty box goes back to the standard activities folder (got '{Text(w, "ActivitiesStatus")}', box '{box.Text}')");
     }
 
     private static PickerRow Picker(Form w, string name) => (PickerRow)w.Controls.Find(name, true)[0];

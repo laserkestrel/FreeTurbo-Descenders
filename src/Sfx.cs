@@ -5,7 +5,7 @@ using System.Text;
 using FMODUnity;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     internal enum Cue { Engage, Disengage, Warn, HandOver }
 
@@ -64,7 +64,18 @@ namespace DescendersCyclingPOC
         /// </summary>
         public static void PlayAt(string path, Vector3 pos, float volume)
         {
-            if (Config.SfxMode == "off" || string.IsNullOrEmpty(path)) return;
+            FMOD.Studio.EventInstance inst; float level;
+            StartAt(path, pos, volume, false, out inst, out level);
+        }
+
+        /// <summary>
+        /// PlayAt that can hand the playing sound back (keep): the caller then fades it with SetLevel and ends it with Cut, which a horn's
+        /// short pap needs. level = the volume it was started at. False = nothing is playing.
+        /// </summary>
+        public static bool StartAt(string path, Vector3 pos, float volume, bool keep, out FMOD.Studio.EventInstance inst, out float level)
+        {
+            inst = default(FMOD.Studio.EventInstance); level = 0f;
+            if (Config.SfxMode == "off" || string.IsNullOrEmpty(path)) return false;
             try
             {
                 bool is3d;
@@ -81,15 +92,28 @@ namespace DescendersCyclingPOC
                     Camera cam = Camera.main;
                     float d = cam != null ? (cam.transform.position - pos).magnitude : 0f;
                     volume *= 1f - Mathf.Clamp01((d - 5f) / 55f);
-                    if (volume < 0.02f) return;
+                    if (volume < 0.02f) return false;
                 }
-                FMOD.Studio.EventInstance inst = RuntimeManager.CreateInstance(path);
+                inst = RuntimeManager.CreateInstance(path);
                 inst.set3DAttributes(RuntimeUtils.To3DAttributes(pos));
                 inst.setVolume(volume);
                 inst.start();
-                inst.release();   // freed by FMOD when it finishes
+                if (!keep) inst.release();   // freed by FMOD when it finishes
+                level = volume;
+                return true;
             }
-            catch (Exception ex) { Log.ErrorLimited("sfx", "Sfx.PlayAt(" + path + ")", ex, 30f); }
+            catch (Exception ex) { Log.ErrorLimited("sfx", "Sfx.PlayAt(" + path + ")", ex, 30f); return false; }
+        }
+
+        public static void SetLevel(FMOD.Studio.EventInstance inst, float volume)
+        {
+            try { inst.setVolume(volume); } catch (Exception ex) { Log.ErrorLimited("sfxlevel", "Sfx.SetLevel", ex, 30f); }
+        }
+
+        /// <summary>End a sound kept from StartAt now, and free it.</summary>
+        public static void Cut(FMOD.Studio.EventInstance inst)
+        {
+            try { inst.stop(FMOD.Studio.STOP_MODE.IMMEDIATE); inst.release(); } catch (Exception ex) { Log.ErrorLimited("sfxcut", "Sfx.Cut", ex, 30f); }
         }
 
         private static void Init()
@@ -113,8 +137,11 @@ namespace DescendersCyclingPOC
                     }
                 }
                 Log.Info("Sfx: " + Events.Count + " FMOD events found");
-                Directory.CreateDirectory(Path.Combine("UserData", "DescendersCyclingPOC"));
-                File.WriteAllText(Path.Combine(Path.Combine("UserData", "DescendersCyclingPOC"), "fmod_events.txt"), string.Join("\n", Events.ToArray()));
+                if (Config.WriteFmodEventList)   // off
+                {
+                    Directory.CreateDirectory(Path.Combine("UserData", Names.Mod));
+                    File.WriteAllText(Path.Combine(Path.Combine("UserData", Names.Mod), "fmod_events.txt"), string.Join("\n", Events.ToArray()));
+                }
             }
             catch (Exception ex) { Log.Error("Sfx: listing FMOD events failed (falling back to tones)", ex); }
         }

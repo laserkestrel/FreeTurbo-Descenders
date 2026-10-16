@@ -87,7 +87,7 @@ public static class Setup
     }
 
     /// <summary>
-    /// `turbotrainer-bridge bluetooth [seconds]`: what Windows says about this PC's Bluetooth, then an advertisement scan (the
+    /// `FreeTurbo-Bridge bluetooth [seconds]`: what Windows says about this PC's Bluetooth, then an advertisement scan (the
     /// check that the radio can be used from this session). Exit 0 = the scan started and stopped without an error, 2 = no usable Bluetooth.
     /// </summary>
     public static async Task<int> BluetoothCheckAsync(int seconds, IBleRadio? radio = null)

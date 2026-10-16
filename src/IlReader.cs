@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// Lists the methods a method body calls, in IL order, by decoding its opcodes (sizes from System.Reflection.Emit.OpCodes).
-    /// Used at runtime to confirm what a game method calls (StartGate.cs); pure .NET, also compiled into the
+    /// Used at runtime to confirm what a game method calls (StartGate.cs) and which fields it reads (DayCycle.cs); pure .NET, also compiled into the
     /// bridge for `selftest`.
     /// </summary>
     public static class IlReader
@@ -16,6 +16,32 @@ namespace DescendersCyclingPOC
 
         /// <summary>Metadata tokens of every call / callvirt / newobj operand in <paramref name="il"/>, in order. Stops at anything it cannot decode.</summary>
         public static List<int> CallTokens(byte[] il)
+        {
+            return Tokens(il, false);
+        }
+
+        /// <summary>Metadata tokens of every ldfld / ldsfld operand (a field read) in <paramref name="il"/>, in order. Stops at anything it cannot decode.</summary>
+        public static List<int> FieldLoadTokens(byte[] il)
+        {
+            return Tokens(il, true);
+        }
+
+        /// <summary>The fields <paramref name="m"/> reads (ldfld / ldsfld), in order; tokens that do not resolve come back null.</summary>
+        public static List<FieldInfo> FieldLoads(MethodBase m)
+        {
+            var list = new List<FieldInfo>();
+            MethodBody body = m.GetMethodBody();
+            if (body == null) return list;
+            foreach (int tok in FieldLoadTokens(body.GetILAsByteArray()))
+            {
+                FieldInfo f = null;
+                try { f = m.Module.ResolveField(tok); } catch { }
+                list.Add(f);
+            }
+            return list;
+        }
+
+        private static List<int> Tokens(byte[] il, bool fieldLoads)
         {
             if (_one == null) BuildTables();
             var tokens = new List<int>();
@@ -33,7 +59,9 @@ namespace DescendersCyclingPOC
                 if (op.Size == 0) break;   // unknown opcode: stop rather than read garbage
                 int operand = OperandSize(op.OperandType, il, i);
                 if (operand < 0 || i + operand > il.Length) break;
-                if ((op.Value == OpCodes.Call.Value || op.Value == OpCodes.Callvirt.Value || op.Value == OpCodes.Newobj.Value) && operand == 4)
+                bool want = fieldLoads ? op.Value == OpCodes.Ldfld.Value || op.Value == OpCodes.Ldsfld.Value
+                                       : op.Value == OpCodes.Call.Value || op.Value == OpCodes.Callvirt.Value || op.Value == OpCodes.Newobj.Value;
+                if (want && operand == 4)
                     tokens.Add(il[i] | (il[i + 1] << 8) | (il[i + 2] << 16) | (il[i + 3] << 24));
                 i += operand;
             }

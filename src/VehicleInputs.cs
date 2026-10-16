@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// The player's live control inputs as the game holds them on Vehicle (written every physics step by VehicleController

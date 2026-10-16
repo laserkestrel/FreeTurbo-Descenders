@@ -1,0 +1,17 @@
+<workout_file>
+  <author>FreeTurbo-Descenders</author>
+  <name>Starter Recovery 20</name>
+  <description>Optional in the FreeTurbo Starter plan. 20 minutes very easy at 50% of FTP to loosen the legs between harder days. Skip it if you would rather rest.</description>
+  <sportType>bike</sportType>
+  <durationType>time</durationType>
+  <tags/>
+  <workout>
+    <Warmup Duration="180" PowerLow="0.35" PowerHigh="0.50" pace="0">
+      <textevent timeoffset="5" message="Recovery spin. Keep it easy."/>
+    </Warmup>
+    <SteadyState Duration="840" Power="0.50" pace="0">
+      <textevent timeoffset="420" message="Easy does it. Enjoy the view."/>
+    </SteadyState>
+    <Cooldown Duration="180" PowerLow="0.50" PowerHigh="0.35" pace="0"/>
+  </workout>
+</workout_file>

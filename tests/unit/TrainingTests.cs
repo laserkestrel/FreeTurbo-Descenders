@@ -1,12 +1,12 @@
 using DescendersBridge.Ant;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 
 /// <summary>
 /// The ERG / workout / trainer-difficulty settings moved from the mod's MelonPreferences.cfg to the `training` section of
 /// TrainerBridgeConfig.json; resistance = raw road gradient x trainerDifficulty; the mod's rider profile comes only from the bridge (src\RiderState.cs).
-/// Run by `turbotrainer-bridge selftest`; temp files only, never the real %APPDATA% file.
+/// Run by `FreeTurbo-Bridge selftest`; temp files only, never the real %APPDATA% file.
 /// </summary>
 public static class TrainingTests
 {

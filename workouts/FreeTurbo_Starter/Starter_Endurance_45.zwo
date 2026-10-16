@@ -1,0 +1,25 @@
+<workout_file>
+  <author>FreeTurbo-Descenders</author>
+  <name>Starter Endurance 45</name>
+  <description>Week 2 of the FreeTurbo Starter plan. 45 minutes of endurance riding: two 15 minute blocks at 68% of FTP with a 5 minute lift to 75% between them.</description>
+  <sportType>bike</sportType>
+  <durationType>time</durationType>
+  <tags/>
+  <workout>
+    <Warmup Duration="420" PowerLow="0.40" PowerHigh="0.65" pace="0">
+      <textevent timeoffset="5" message="Warm-up. A longer steady ride today."/>
+    </Warmup>
+    <SteadyState Duration="900" Power="0.68" pace="0">
+      <textevent timeoffset="5" message="15 minutes steady."/>
+    </SteadyState>
+    <SteadyState Duration="300" Power="0.75" pace="0">
+      <textevent timeoffset="5" message="Lift it a little for 5 minutes."/>
+    </SteadyState>
+    <SteadyState Duration="900" Power="0.68" pace="0">
+      <textevent timeoffset="5" message="Back to steady. Last long block."/>
+    </SteadyState>
+    <Cooldown Duration="180" PowerLow="0.60" PowerHigh="0.40" pace="0">
+      <textevent timeoffset="5" message="Cool-down. Well ridden."/>
+    </Cooldown>
+  </workout>
+</workout_file>

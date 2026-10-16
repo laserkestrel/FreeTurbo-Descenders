@@ -25,10 +25,29 @@ public static class BuildStampTests
 
         // Run from the built exe (dotnet run / the installed bridge): its version resource must carry the stamp, or WhatsInstalled.ps1 is blind.
         string? exe = Environment.ProcessPath;
-        if (exe is not null && Path.GetFileName(exe).Equals("turbotrainer-bridge.exe", StringComparison.OrdinalIgnoreCase))
+        if (exe is not null && Path.GetFileName(exe).Equals(FreeTurboDescenders.Names.Bridge + ".exe",StringComparison.OrdinalIgnoreCase))
         {
             string? pv = FileVersionInfo.GetVersionInfo(exe).ProductVersion;
             check(pv == s, $"the exe's ProductVersion is the stamp (got '{pv}')");
         }
+
+        // The window's title bar shows the name and version number only; the whole stamp stays in the log and the exe's ProductVersion
+        string bridge = FreeTurboDescenders.Names.Bridge;
+        foreach (var (stamp, demo, want) in new[]
+        {
+            ("1.0.258 (f707dd4) on main, built 2026-10-16 16:44 UTC", false, bridge + " 1.0.258"),
+            ("1.0.258 (f707dd4) on day-night-cycle (+changes), built 2026-10-16 16:44 UTC", false, bridge + " 1.0.258"),
+            ("1.0.258 (f707dd4) on main, built 2026-10-16 16:44 UTC", true, bridge + " 1.0.258 (demo: made-up readings)"),
+            ("f707dd4 on main, built 2026-10-16 16:44 UTC", false, bridge),
+            ("unknown, built 2026-10-16 16:44 UTC", false, bridge),
+            ("", false, bridge),
+        })
+        {
+            string got = Gui.BridgeWindow.Title(stamp, demo);
+            check(got == want, $"window title for '{stamp}'{(demo ? " (demo)" : "")} is '{want}' (got '{got}')");
+        }
+        string live = Gui.BridgeWindow.Title(s, false);
+        check(!live.Contains("built", StringComparison.Ordinal) && !live.Contains(" on ", StringComparison.Ordinal),
+            $"this build's window title has no commit, branch or build time (got '{live}')");
     }
 }

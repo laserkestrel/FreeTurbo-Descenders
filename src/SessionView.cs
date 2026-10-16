@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 // Pure logic (no Unity, no logging): also compiled into the bridge (bridge/DescendersBridge.csproj links this file), whose Session writes
 // the `session` message these classes read (docs/IPC.md), so `selftest` checks the two ends against each other.
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>One event of the bridge's `session` message: step | countdown | text | complete. <see cref="Seq"/> is monotonic per bridge run.</summary>
     internal sealed class SessionEvent

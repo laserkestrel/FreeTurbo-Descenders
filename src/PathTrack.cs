@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// The game's generated course centreline: a Vector3[] (about 1 m spacing, on the terrain surface) held by the
@@ -36,6 +36,40 @@ namespace DescendersCyclingPOC
             _nextTry = now + 2f;
             try { if (Loaded) FindTriggers(); else TryLoad(); }
             catch (Exception ex) { Log.ErrorLimited("pathload", "PathTrack.TryLoad", ex, 30f); }
+        }
+
+        /// <summary>
+        /// Checked every 2 s: does the game hold another course path than the one loaded? In a session the game builds the next
+        /// level inside the same scene, so no scene load says "new course"; the caller then resets as it does for a scene change.
+        /// </summary>
+        public bool CourseChanged()
+        {
+            if (!Loaded) return false;
+            float now = Time.unscaledTime;
+            if (now < _nextCheck) return false;
+            _nextCheck = now + 2f;
+            try
+            {
+                var ti = UnityEngine.Object.FindObjectOfType<TerrainInfo>();
+                if (ti == null) return false;   // between two levels: the new path says so when it is there
+                Vector3[] best = null; string bestName = null;
+                Search(ti, "TerrainInfo", 0, ref best, ref bestName);
+                if (best == null || best.Length < 10) return false;
+                if (CourseRules.SameCourse(Points.Length, Samples(Points), best.Length, Samples(best))) return false;
+                Log.Info("Path: the game has another course in this scene (" + best.Length + " points, first=" + best[0] + "; was " + Points.Length
+                         + " points, first=" + Points[0] + "): new course");
+                return true;
+            }
+            catch (Exception ex) { Log.ErrorLimited("pathcheck", "PathTrack.CourseChanged", ex, 30f); return false; }
+        }
+
+        private float _nextCheck;
+
+        private static float[] Samples(Vector3[] pts)
+        {
+            var xyz = new float[pts.Length * 3];
+            for (int i = 0; i < pts.Length; i++) { xyz[i * 3] = pts[i].x; xyz[i * 3 + 1] = pts[i].y; xyz[i * 3 + 2] = pts[i].z; }
+            return CourseRules.Samples(xyz);
         }
 
         private void TryLoad()

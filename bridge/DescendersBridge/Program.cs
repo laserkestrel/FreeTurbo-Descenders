@@ -1,39 +1,39 @@
 using DescendersBridge;
 using DescendersBridge.Ant;
 
-// turbotrainer-bridge scan [seconds]                 list every ANT+ device in range, live, then the Bluetooth trainers and sensors heard
-// turbotrainer-bridge setup [seconds]                scan (ANT+ and Bluetooth), then choose a device per role and save it
-// turbotrainer-bridge show                           print the saved choices
-// turbotrainer-bridge set <role> <type> <number> [tx]   save one choice without scanning (scripting)
-// turbotrainer-bridge set <role> bluetooth <address> [name]   the same for a Bluetooth trainer or sensor (HeartRate, Cadence, Power:)
-// turbotrainer-bridge bluetooth [seconds]            what Windows says about this PC's Bluetooth, then an advertisement scan (default 10 s);
+// FreeTurbo-Bridge scan [seconds]                 list every ANT+ device in range, live, then the Bluetooth trainers and sensors heard
+// FreeTurbo-Bridge setup [seconds]                scan (ANT+ and Bluetooth), then choose a device per role and save it
+// FreeTurbo-Bridge show                           print the saved choices
+// FreeTurbo-Bridge set <role> <type> <number> [tx]   save one choice without scanning (scripting)
+// FreeTurbo-Bridge set <role> bluetooth <address> [name]   the same for a Bluetooth trainer or sensor (HeartRate, Cadence, Power:)
+// FreeTurbo-Bridge bluetooth [seconds]            what Windows says about this PC's Bluetooth, then an advertisement scan (default 10 s);
 //                                                    exit 0 = usable, 2 = no usable Bluetooth
-// turbotrainer-bridge clear <role>                   forget one choice
-// turbotrainer-bridge run [seconds]                  ride: read the chosen devices, talk to the mod, drive trainer resistance (0 = until Ctrl+C)
-// turbotrainer-bridge run [seconds] --erg <watts>    same, but hold a fixed ERG target (FE-C page 49) with no mod: bench test TE1
-// turbotrainer-bridge run --auto [--parent <pid>]    how the mod starts it when none is running: no questions, chooses the trainer itself if none
+// FreeTurbo-Bridge clear <role>                   forget one choice
+// FreeTurbo-Bridge run [seconds]                  ride: read the chosen devices, talk to the mod, drive trainer resistance (0 = until Ctrl+C)
+// FreeTurbo-Bridge run [seconds] --erg <watts>    same, but hold a fixed ERG target (FE-C page 49) with no mod: bench test TE1
+// FreeTurbo-Bridge run --auto [--parent <pid>]    how the mod starts it when none is running: no questions, chooses the trainer itself if none
 //                                                    is saved, retries a missing stick, reports its state to the mod's HUD, logs to logs\bridge_*.log;
 //                                                    outlives the game, stops after 10 min with no game connected
-// turbotrainer-bridge run --sim [--watts N | --watts-profile "0:150,30:250"] [--cadence N] [--idle-between from,to]
+// FreeTurbo-Bridge run --sim [--watts N | --watts-profile "0:150,30:250"] [--cadence N] [--idle-between from,to]
 //                     [--stop-sending-after N] [--seconds N] [--log <file.jsonl>] [--workout <file.zwo>]
 //                                                    fake trainer, no stick: the real ride loop and workout session, for the smoke test and
 //                                                    loop tests (replaces tools\BridgeSim.ps1); logs every packet to --log or logs\ride_*.jsonl;
 //                                                    --workout starts that workout file at once (no in-game menu, and no window here)
 //   --parent <pid> (with any run): stop, releasing the trainer, when that process exits (the mod no longer passes it)
 //   --seconds <n> (with any run): stop after n seconds, like `run <n>`
-// turbotrainer-bridge command <name> [value] [durationSec]   send the mod one command (docs/IPC.md: ping, press_start, quit, set_test_speed, ...);
+// FreeTurbo-Bridge command <name> [value] [durationSec]   send the mod one command (docs/IPC.md: ping, press_start, quit, set_test_speed, ...);
 //                                                    the ack goes to 9871, so a running bridge logs it
 //   every run sends the rider profile to the mod every 5 s (`rider` message)
 // setup, show, set, clear and run first load and print the per-user %APPDATA%\TrainerBridge\TrainerBridgeConfig.json
 // (rider profile + chosen devices, TrainerBridgeConfig.cs)
-// turbotrainer-bridge stop                           ask a bridge the game started (run --auto) to stop, releasing the trainer (the
+// FreeTurbo-Bridge stop                           ask a bridge the game started (run --auto) to stop, releasing the trainer (the
 //                                                    dev scripts use it before installing); the window and run / run --sim ignore it
-// turbotrainer-bridge keysource                   where the ANT+ network key comes from: prints built-in, config.json or none
+// FreeTurbo-Bridge keysource                   where the ANT+ network key comes from: prints built-in, config.json or none
 //                                                    (exit 0, or 2 for none); never prints the key
-// turbotrainer-bridge version                       which code this exe was built from: commit, branch, (+changes), build time (
+// FreeTurbo-Bridge version                       which code this exe was built from: commit, branch, (+changes), build time (
 //                                                    BuildStamp.targets); the same text is the exe's ProductVersion
-// turbotrainer-bridge                               (no arguments, e.g. double-clicked) opens the window (Gui\): same code, one process
-// turbotrainer-bridge gui [--demo]                   the window from a command line; --demo shows made-up readings and devices (no stick needed)
+// FreeTurbo-Bridge                               (no arguments, e.g. double-clicked) opens the window (Gui\): same code, one process
+// FreeTurbo-Bridge gui [--demo]                   the window from a command line; --demo shows made-up readings and devices (no stick needed)
 //   --config <file> (with any command): use that settings file instead of %APPDATA%\TrainerBridge\TrainerBridgeConfig.json (tests)
 int ci = Array.FindIndex(args, a => a.Equals("--config", StringComparison.OrdinalIgnoreCase));
 if (ci >= 0)
@@ -43,7 +43,7 @@ if (ci >= 0)
     args = args.Where((_, i) => i != ci && i != ci + 1).ToArray();
 }
 string cmd = args.Length > 0 ? args[0].ToLowerInvariant() : "gui";
-const string Usage = "usage: turbotrainer-bridge scan|setup|show|set|clear|bluetooth|run|command|stop|keysource|version|gui|selftest [--config <file>]   (see docs/BRIDGE.md)\n"
+const string Usage = "usage: FreeTurbo-Bridge scan|setup|show|set|clear|bluetooth|run|command|stop|keysource|version|gui|selftest [--config <file>]   (see docs/BRIDGE.md)\n"
     + "       no arguments (or double-click): open the window";
 int Arg(int i, int dflt) => args.Length > i && int.TryParse(args[i], out int v) ? v : dflt;
 
@@ -197,7 +197,7 @@ static async Task<int> Run(int seconds, double? fixedErgW, int? parentPid)
     var (rider, prefs) = TrainerBridgeConfig.Load();
     if (prefs.Get(Role.Trainer) is null && prefs.Get(Role.HeartRate) is null && prefs.Get(Role.Cadence) is null && prefs.Get(Role.Power) is null)
     {
-        Console.WriteLine("Nothing chosen. Run `turbotrainer-bridge setup` first (or `run --auto` to choose the trainer automatically).");
+        Console.WriteLine("Nothing chosen. Run `FreeTurbo-Bridge setup` first (or `run --auto` to choose the trainer automatically).");
         return 1;
     }
 

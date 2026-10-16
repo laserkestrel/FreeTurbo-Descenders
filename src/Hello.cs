@@ -2,7 +2,7 @@
 
 // Pure logic (no Unity, no logging): also compiled into the bridge (bridge/DescendersBridge.csproj links this file) so `selftest` checks the
 // message the mod sends against the bridge's parser.
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>The `hello` message (docs/IPC.md): which game this is, its build, and what the bridge may use it for.</summary>
     internal static class Hello
@@ -18,6 +18,13 @@ namespace DescendersCyclingPOC
             var w = new JsonWriter().Obj().Prop("type", "hello").Prop("game", Game).Prop("version", version ?? "").Arr("capabilities");
             for (int i = 0; i < Capabilities.Length; i++) w.Val(Capabilities[i]);
             return w.EndArr().End().ToString();
+        }
+
+        /// <summary>The `bye` message (docs/IPC.md): the game is quitting. A bridge the game started (`run --auto`, no window) stops on it,
+        /// releasing the trainer first; the window and `run` / `run --sim` only log it.</summary>
+        public static string Bye()
+        {
+            return new JsonWriter().Obj().Prop("type", "bye").Prop("game", Game).End().ToString();
         }
     }
 }

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>
     /// U-turns at both ends of the course (fitness mode only; auto-braking IS wanted here). Bottom (travelling toward the finish): the game

@@ -1,0 +1,24 @@
+<workout_file>
+  <author>FreeTurbo-Descenders</author>
+  <name>Starter Hill Repeats 45</name>
+  <description>Week 2 of the FreeTurbo Starter plan. Five 2 minute climbs at FTP with 3 minutes easy after each. The end of the starter plan: next, try the longer sample workouts or bring your own plans.</description>
+  <sportType>bike</sportType>
+  <durationType>time</durationType>
+  <tags/>
+  <workout>
+    <Warmup Duration="600" PowerLow="0.40" PowerHigh="0.75" pace="0">
+      <textevent timeoffset="5" message="Warm-up. Five hill repeats today."/>
+    </Warmup>
+    <IntervalsT Repeat="5" OnDuration="120" OffDuration="180" OnPower="1.00" OffPower="0.55" pace="0">
+      <textevent timeoffset="2" message="Climb 1 of 5. Steady at FTP."/>
+      <textevent timeoffset="602" message="Climb 3 of 5. Halfway."/>
+      <textevent timeoffset="1202" message="Last climb. Finish strong."/>
+    </IntervalsT>
+    <SteadyState Duration="300" Power="0.65" pace="0">
+      <textevent timeoffset="5" message="Climbs done. Easy spin."/>
+    </SteadyState>
+    <Cooldown Duration="300" PowerLow="0.60" PowerHigh="0.40" pace="0">
+      <textevent timeoffset="5" message="Plan complete. Great work."/>
+    </Cooldown>
+  </workout>
+</workout_file>

@@ -12,8 +12,18 @@ Copyright (c) Garmin Canada Inc. / Dynastream Innovations Inc.
 They are used and redistributed under the ANT+ Shared Source License,
 reproduced in full below.
 
-The ANT+ network key built into turbotrainer-bridge.exe is used under the
+The ANT+ network key built into FreeTurbo-Bridge.exe is used under the
 owner's ANT+ Adopter Agreement and is not part of the source code.
+
+------------------------------------------------------------------------------
+
+Motion capture
+
+Some movements of the spectators in the game mod (FreeTurbo-Descenders.dll)
+were made from recordings of the Carnegie Mellon University Motion Capture
+Database, mocap.cs.cmu.edu (subject 30, trial 22). The database was created
+with funding from NSF EIA-0196217. Its terms: "The motion capture data may be
+copied, modified, or redistributed without permission."
 
 ------------------------------------------------------------------------------
 

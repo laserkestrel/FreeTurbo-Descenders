@@ -1,6 +1,6 @@
 using DescendersBridge.Ant;
 using DescendersBridge.Gui;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge;
 
@@ -8,7 +8,7 @@ namespace DescendersBridge;
 /// The bridge owns the workout library setting (`library` section of TrainerBridgeConfig.json) and is the only writer of plan
 /// progress. Workouts and training plans are chosen and started in the bridge window's Workouts tab (Menu.cs over the
 /// WorkoutPicker / PlanPicker lists), and the game has no menu any more (no `menu` message, no menu_* intents, no picker code or keys in the
-/// mod). Temp folders only, never the real %APPDATA% file. Run by `turbotrainer-bridge selftest`.
+/// mod). Temp folders only, never the real %APPDATA% file. Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class MenuTests
 {

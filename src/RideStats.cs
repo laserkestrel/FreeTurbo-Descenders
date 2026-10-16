@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     /// <summary>Ride totals for the rider HUD. Climbed metres = sum of real height gains (game world metres), ignoring bumps below ClimbHysteresisM.</summary>
     internal sealed class RideStats

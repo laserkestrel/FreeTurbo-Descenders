@@ -1,0 +1,27 @@
+<workout_file>
+  <author>FreeTurbo-Descenders</author>
+  <name>Starter Tempo Blocks 40</name>
+  <description>Week 1 of the FreeTurbo Starter plan. Three 6 minute blocks at 80% of FTP with 3 minutes easy between them. Tempo should feel purposeful but comfortable: you can still speak in short sentences.</description>
+  <sportType>bike</sportType>
+  <durationType>time</durationType>
+  <tags/>
+  <workout>
+    <Warmup Duration="480" PowerLow="0.40" PowerHigh="0.70" pace="0">
+      <textevent timeoffset="5" message="Warm-up. Three tempo blocks today."/>
+    </Warmup>
+    <SteadyState Duration="360" Power="0.80" pace="0">
+      <textevent timeoffset="5" message="Tempo 1 of 3. Smooth and steady."/>
+    </SteadyState>
+    <SteadyState Duration="180" Power="0.55" pace="0"/>
+    <SteadyState Duration="360" Power="0.80" pace="0">
+      <textevent timeoffset="5" message="Tempo 2 of 3. Same again."/>
+    </SteadyState>
+    <SteadyState Duration="180" Power="0.55" pace="0"/>
+    <SteadyState Duration="360" Power="0.80" pace="0">
+      <textevent timeoffset="5" message="Last tempo block."/>
+    </SteadyState>
+    <Cooldown Duration="480" PowerLow="0.60" PowerHigh="0.40" pace="0">
+      <textevent timeoffset="5" message="Done. Spin it out."/>
+    </Cooldown>
+  </workout>
+</workout_file>

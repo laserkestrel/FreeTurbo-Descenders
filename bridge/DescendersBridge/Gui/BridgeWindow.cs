@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using DescendersBridge.Ant;
-using DescendersCyclingPOC;
+using FreeTurboDescenders;
 
 namespace DescendersBridge.Gui;
 
@@ -112,8 +112,8 @@ public sealed class BridgeWindow : Form
     private Session? _demoSession;      // `gui --demo` has no ride loop: the tab drives a session of its own
 
     // Logs tab (called Details earlier; the workout library folder and the logs folder are set here)
-    private readonly TextBox _logText, _libraryDir, _logsDir;
-    private readonly Label _libraryStatus, _logsStatus;
+    private readonly TextBox _logText, _libraryDir, _logsDir, _activitiesDir;
+    private readonly Label _libraryStatus, _logsStatus, _activitiesStatus;
 
     // The Xbox pad: polled on its own timer, acted on only while this window is in front and no game is connected
     private readonly System.Windows.Forms.Timer _padTimer = new() { Interval = 30 };
@@ -142,6 +142,17 @@ public sealed class BridgeWindow : Form
         return new Size(Math.Max(w, SmallestSize.Width), Math.Max(h, SmallestSize.Height));
     }
 
+    /// <summary>
+    /// The window's title: the bridge's name and the version number only, e.g. "FreeTurbo-Bridge 1.0.258", taken from the front of the
+    /// build stamp ("1.0.258 (f707dd4) on main, built ..."). A stamp with no version (a build without git: "unknown, built ...") gives the
+    /// name alone. The commit, branch and build time are for us, not the rider: they are the log's first line, `Bridge build:`. Pure.
+    /// </summary>
+    public static string Title(string stamp, bool demo)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(stamp ?? "", @"^([0-9][0-9A-Za-z.\-]*) \(");
+        return Names.Bridge + (m.Success ? " " + m.Groups[1].Value : "") + (demo ? " (demo: made-up readings)" : "");
+    }
+
     public BridgeWindow(bool demo, LogSink log)
     {
         _demo = demo;
@@ -152,8 +163,8 @@ public sealed class BridgeWindow : Form
         Theme.SetAccent(TrainerBridgeConfig.EnsureAccentColour(Console.WriteLine));
 
         Name = "BridgeWindow";
-        // the build stamp in the title bar: which code this is, without opening the Logs tab
-        Text = "Turbo Trainer Bridge" + (demo ? " (demo: made-up readings)" : "") + "   [build " + BuildStamp.Text + "]";
+        // the version number in the title bar; the whole build stamp (commit, branch, build time) is the log's first line
+        Text = Title(BuildStamp.Text, demo);
         if (AppIcon.Load() is { } icon) Icon = icon;
         Font = Theme.Body;
         MinimumSize = SmallestSize;
@@ -395,29 +406,38 @@ public sealed class BridgeWindow : Form
         _nowRiding = new StatusIndicator { Name = "NowRiding" };
         woRoot.Controls.Add(_nowRiding);
 
-        // ---- Logs tab: what never changes on top (the build, where the settings file is, the logs folder button), then
-        // the two folders the rider chooses, the workout library (moved here from the Workouts tab) and the logs folder, each
-        // a box with Browse... and Save, then the log, which scrolls in its own card ----
+        // ---- Logs tab: one card for the folders the rider chooses, the workout library (moved here from the
+        // Workouts tab), the activities folder (the .fit file written after each ride) and the logs folder, each a box
+        // with Browse... and Save, and the settings folder under them (shown only); then the log, which scrolls in its own card. The build is
+        // in the log (its version number in the title bar), so it is not repeated here ----
         var details = new StackPanel { Dock = DockStyle.Fill, Padding = new Padding(S(16)), Gap = S(12) };
-        var aboutCard = new Card { Name = "AboutBox", Padding = new Padding(S(18), S(12), S(18), S(12)), Gap = S(8) };
-        var aboutText = new StackPanel { Gap = S(4) };
-        // the path is a link: a click shows the file in Explorer
-        var configPath = new TextLabel("Settings file: " + TrainerBridgeConfig.Path, Theme.Small, Theme.Accent) { Name = "ConfigPath", Cursor = Cursors.Hand };
-        configPath.Click += (_, _) => ShowSettingsFile();
-        _tip.SetToolTip(configPath, "Show this file in its folder");
-        aboutText.Controls.AddRange(new Control[] { new TextLabel("Build " + BuildStamp.Text, Theme.Small, Theme.Muted) { Name = "BuildText" }, configPath });
-        var openLogs = new ModernButton { Name = "OpenLogsButton", Text = "Open the logs folder" };
-        openLogs.Click += (_, _) => OpenLogsFolder();
-        var aboutRow = new Row { Gap = S(14), Stretch = aboutText };
-        aboutRow.Controls.AddRange(new Control[] { aboutText, openLogs });
-        aboutCard.Controls.Add(aboutRow);
-        details.Controls.Add(aboutCard);
-
         var foldersCard = new Card { Name = "FoldersBox", Padding = new Padding(S(18), S(12), S(18), S(12)), Gap = S(6) };
         (_libraryDir, _libraryStatus) = AddFolder(foldersCard, "Library", "Workout library", "Workout library folder", BrowseLibrary, SaveLibrary);
+        (_activitiesDir, _activitiesStatus) = AddFolder(foldersCard, "Activities", "Activities folder", "Activities folder", BrowseActivities, SaveActivities);
         (_logsDir, _logsStatus) = AddFolder(foldersCard, "Logs", "Logs folder", "Logs folder", BrowseLogs, SaveLogs);
-        // the two headings are as wide as each other, so the boxes line up
-        var folderHeads = foldersCard.Controls.OfType<Row>().Select(r => (TextLabel)r.Controls[0]).ToList();
+        // the settings folder looks like the three above but is only shown, never chosen (the program could not find a settings file
+        // whose place is written in that file): a box that cannot be typed in, and one button as wide as Browse... and Save together
+        // that shows the file in Explorer
+        var logsRow = foldersCard.Controls.OfType<Row>().Last();
+        var settingsDir = new TextBox
+        {
+            Name = "SettingsDir", AccessibleName = "Settings folder", ReadOnly = true,
+            Text = Path.GetDirectoryName(Path.GetFullPath(TrainerBridgeConfig.Path)) ?? "",
+        };
+        var settingsField = new FieldFrame(settingsDir, S(420));
+        var openSettings = new ModernButton
+        {
+            Name = "OpenSettingsButton", Text = "Open folder",
+            MinWidth = ((ModernButton)logsRow.Controls[2]).Measure(0).Width + logsRow.Gap + ((ModernButton)logsRow.Controls[3]).Measure(0).Width,
+        };
+        openSettings.Click += (_, _) => ShowSettingsFile();
+        _tip.SetToolTip(openSettings, "Show the settings file in its folder");
+        var settingsRow = new Row { Gap = S(10), Stretch = settingsField };
+        settingsRow.Controls.AddRange(new Control[] { new SectionHeader("Settings folder") { Wrap = false }, settingsField, openSettings });
+        foldersCard.Controls.Add(settingsRow);
+        foldersCard.Controls.Add(new TextLabel("Your settings are kept in " + TrainerBridgeConfig.FileName + " in this folder. It cannot be moved.", Theme.Small, Theme.Muted) { Name = "SettingsStatus" });
+        // the headings are as wide as each other, so the boxes line up
+        var folderHeads = foldersCard.Controls.OfType<Row>().Select(r => r.Controls[0]).OfType<TextLabel>().ToList();
         int headWidth = folderHeads.Max(h => h.Measure(0).Width);
         foreach (var h in folderHeads) h.MinWidth = headWidth;
         details.Controls.Add(foldersCard);
@@ -557,6 +577,8 @@ public sealed class BridgeWindow : Form
         _libraryStatus.Text = LibraryText.Status(_libraryDir.Text);
         _logsDir.Text = Ride.LogsDir;
         _logsStatus.Text = LogsFolder.Status(TrainerBridgeConfig.LoadLogsDir(), Ride.DefaultLogsDir);
+        _activitiesDir.Text = ActivityFiles.Dir;
+        _activitiesStatus.Text = ActivityFiles.Status(TrainerBridgeConfig.LoadActivitiesDir(), ActivityFiles.StandardDir);
         ShowMenu();
     }
 
@@ -598,6 +620,48 @@ public sealed class BridgeWindow : Form
         {
             Console.WriteLine("ERROR saving the logs folder: " + ex.Message);
             _logsStatus.Text = "Not saved.";
+            CheckConfig();
+        }
+    }
+
+    // ================= activities folder (a box like the logs folder's, with the same rules) =================
+
+    private void BrowseActivities()
+    {
+        using var dlg = new FolderBrowserDialog
+        {
+            Description = "Choose the folder for the activity files (.fit) saved after each ride",
+            UseDescriptionForTitle = true, ShowNewFolderButton = true,
+        };
+        if (Directory.Exists(_activitiesDir.Text.Trim())) dlg.SelectedPath = _activitiesDir.Text.Trim();
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        _activitiesDir.Text = dlg.SelectedPath;
+        SaveActivities();
+    }
+
+    private void SaveActivities()
+    {
+        string dir = _activitiesDir.Text.Trim();
+        if (LogsFolder.Refuse(dir) is { } why) { _activitiesStatus.Text = why; return; }
+        string store = LogsFolder.ToStore(dir, ActivityFiles.StandardDir);
+        try { if (store.Length > 0) Directory.CreateDirectory(store); }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Activities folder " + store + " could not be made: " + ex.Message);
+            _activitiesStatus.Text = "Not saved: that folder could not be made. Choose another one with \"Browse...\".";
+            return;
+        }
+        try
+        {
+            TrainerBridgeConfig.SaveActivitiesDir(store);
+            Console.WriteLine("Activities folder saved: " + (store.Length > 0 ? store : "(standard) " + ActivityFiles.StandardDir));
+            _activitiesDir.Text = ActivityFiles.Dir;
+            _activitiesStatus.Text = "Saved. " + ActivityFiles.SavedNote;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("ERROR saving the activities folder: " + ex.Message);
+            _activitiesStatus.Text = "Not saved.";
             CheckConfig();
         }
     }
@@ -1442,17 +1506,7 @@ public sealed class BridgeWindow : Form
         _bannerHandler = null;
     }
 
-    private void OpenLogsFolder()
-    {
-        try
-        {
-            string dir = Ride.UsableLogsDir(Console.WriteLine);
-            Process.Start(new ProcessStartInfo("explorer.exe", "\"" + dir + "\"") { UseShellExecute = true })?.Dispose();
-        }
-        catch (Exception ex) { Console.WriteLine("Could not open the logs folder: " + ex.Message); }
-    }
-
-    /// <summary>The settings file's link on the Logs tab: its folder in Explorer, with the file selected.</summary>
+    /// <summary>The Logs tab's settings folder button: its folder in Explorer, with the file selected.</summary>
     private void ShowSettingsFile()
     {
         if (_demo) { Console.WriteLine("Demo: would show " + TrainerBridgeConfig.Path + " in Explorer"); return; }

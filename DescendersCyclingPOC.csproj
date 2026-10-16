@@ -10,8 +10,9 @@
   <PropertyGroup>
     <!-- Same target as DescendersSandbox: Unity 2017.4 Mono, .NET Framework 4.7.2 profile -->
     <TargetFramework>net472</TargetFramework>
-    <AssemblyName>DescendersCyclingPOC</AssemblyName>
-    <RootNamespace>DescendersCyclingPOC</RootNamespace>
+    <!-- The mod is FreeTurbo-Descenders (was DescendersCyclingPOC; this project file keeps its old name). -->
+    <AssemblyName>FreeTurbo-Descenders</AssemblyName>
+    <RootNamespace>FreeTurboDescenders</RootNamespace>
     <LangVersion>9.0</LangVersion>
     <Nullable>disable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -25,12 +26,14 @@
     <!-- Don't copy referenced game DLLs next to our output -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <!-- The bridge (bridge/) is a separate net8.0 project; do not glob its sources into the mod. tests/ are compiled into the bridge selftest. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);bridge/**;lib/**;tests/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bridge/**;lib/**;tests/**;tools/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Bridge-only: the workout / plan lists, training plans and progress run in the bridge (bridge\DescendersBridge.csproj links them) -->
     <Compile Remove="src/WorkoutPicker.cs;src/PlanPicker.cs;src/Plan.cs;src/Progress.cs" />
+    <!-- The spectators' motion-capture clips (docs/SPECTATORS.md "Motion capture") -->
+    <EmbeddedResource Include="src\mocap\*.dmc" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,6 +49,7 @@
     <Reference Include="UnityEngine"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.AudioModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.TerrainModule"><HintPath>$(DescendersPath)\Descenders_Data\Managed\UnityEngine.TerrainModule.dll</HintPath><Private>false</Private></Reference>
@@ -59,6 +63,8 @@
 
   <!-- Copy the DLL into the game's Mods folder after every build (never touches DescendersSandbox.dll) -->
   <Target Name="InstallToMods" AfterTargets="Build" Condition="Exists('$(DescendersPath)\Mods') And '$(SkipInstall)' != 'true'">
+    <!-- The DLL under its old name must go: MelonLoader would load both and every hook would run twice. -->
+    <Delete Files="$(DescendersPath)\Mods\DescendersCyclingPOC.dll" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(DescendersPath)\Mods" />
     <Message Importance="high" Text="Installed $(TargetFileName) -> $(DescendersPath)\Mods" />
   </Target>

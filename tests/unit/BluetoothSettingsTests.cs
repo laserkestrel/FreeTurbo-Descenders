@@ -8,7 +8,7 @@ namespace DescendersBridge;
 /// A chosen device is ANT+ or Bluetooth. The settings file (an old file without `transport` is ANT+, a Bluetooth device
 /// round-trips, `knownDevices` keeps both kinds), and the rule the ride opens its radios by: the stick and the ANT+ key only when a chosen
 /// device is ANT+, Bluetooth only when the trainer is a Bluetooth one, and a PC with no Bluetooth says so in one plain sentence.
-/// Uses a temp folder and fakes, never the real %APPDATA% file, a stick or a radio. Run by `turbotrainer-bridge selftest`.
+/// Uses a temp folder and fakes, never the real %APPDATA% file, a stick or a radio. Run by `FreeTurbo-Bridge selftest`.
 /// </summary>
 public static class BluetoothSettingsTests
 {

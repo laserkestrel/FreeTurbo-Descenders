@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 
 // Pure logic (no Unity, no logging), bridge-only: the bridge's Menu runs it (bridge/DescendersBridge.csproj links this file; the mod leaves it out).
-namespace DescendersCyclingPOC
+namespace FreeTurboDescenders
 {
     internal sealed class PlanPickerEntry
     {
